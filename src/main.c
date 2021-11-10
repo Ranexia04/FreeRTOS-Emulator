@@ -634,14 +634,10 @@ void vDemoTask1(void *pvParameters)
     ball_t *my_circle = createBall(SCREEN_WIDTH / 4, SCREEN_HEIGHT / 2, Red,
                                  RADIUS, 1000, &playBallSound, NULL);
 
-    static struct timespec the_time, the_time_ref;
-
     static char str[100];
     static int str_width = 0;
     static int number_buttons[4] = {0};
     static int flag_buttons[4] = {0};
-
-    clock_gettime(CLOCK_REALTIME, &the_time_ref);
 
     while (1) {
         if (DrawSignal)
@@ -658,34 +654,20 @@ void vDemoTask1(void *pvParameters)
                 vDrawStaticItems();
                 //vDrawCave(tumEventGetMouseLeft());
                 //vDrawButtonText();
-                
-                clock_gettime(CLOCK_REALTIME, &the_time);
-                the_time.tv_nsec = the_time.tv_nsec - the_time_ref.tv_nsec;
-                printf("%f    %f\n", (double)the_time.tv_nsec, (double)the_time.tv_nsec/1000000000);
 
-                my_circle->x = SCREEN_WIDTH / 2 + SCREEN_WIDTH / 4 * (-1*cos(2*PI*FREQ*(double)the_time.tv_nsec/1000000000));
-                my_circle->y = SCREEN_HEIGHT / 2 + SCREEN_HEIGHT / 4 * (-1*sin(2*PI*FREQ*(double)the_time.tv_nsec/1000000000));
+                my_circle->x = SCREEN_WIDTH / 2 + SCREEN_WIDTH / 4 * (-1*cos(2*PI*FREQ*1));
+                my_circle->y = SCREEN_HEIGHT / 2 + SCREEN_HEIGHT / 4 * (-1*sin(2*PI*FREQ*1));
                 checkDraw(tumDrawCircle(my_circle->x, my_circle->y, my_circle->radius, my_circle->colour), __FUNCTION__);
 
-                my_square_x = SCREEN_WIDTH / 2 - RADIUS + SCREEN_WIDTH / 4 * cos(2*PI*FREQ*(double)the_time.tv_nsec/1000000000);
-                my_square_y = SCREEN_HEIGHT / 2 - RADIUS + SCREEN_HEIGHT / 4 * sin(2*PI*FREQ*(double)the_time.tv_nsec/1000000000);
+                my_square_x = SCREEN_WIDTH / 2 - RADIUS + SCREEN_WIDTH / 4 * cos(2*PI*FREQ*1);
+                my_square_y = SCREEN_HEIGHT / 2 - RADIUS + SCREEN_HEIGHT / 4 * sin(2*PI*FREQ*1);
                 checkDraw(tumDrawFilledBox(my_square_x, my_square_y, 2*RADIUS, 2*RADIUS, TUMBlue), __FUNCTION__);
 
                 checkDraw(tumDrawTriangle(triangle_coords, Green), __FUNCTION__);
-                
-                sprintf(str, "This");
-                if (!tumGetTextSize((char*)str, &str_width, NULL)){
-                    checkDraw(tumDrawText(str, my_circle->x - RADIUS + str_width / 2, my_circle->y + RADIUS + DEFAULT_FONT_SIZE/2, Black), __FUNCTION__);
-                }
 
-                sprintf(str, "tough");
+                sprintf(str, "GG EZ PZ");
                 if (!tumGetTextSize((char*)str, &str_width, NULL)){
-                    checkDraw(tumDrawText(str, my_square_x + RADIUS - str_width / 2, my_square_y + 2 * RADIUS + DEFAULT_FONT_SIZE/2, Black), __FUNCTION__);
-                }
-
-                sprintf(str, "is");
-                if (!tumGetTextSize((char*)str, &str_width, NULL)){
-                    checkDraw(tumDrawText(str, triangle_coords[0].x + RADIUS - str_width / 2, triangle_coords[0].y + DEFAULT_FONT_SIZE/2, Black), __FUNCTION__);
+                    checkDraw(tumDrawText(str, SCREEN_WIDTH / 2 - str_width / 2, SCREEN_HEIGHT - DEFAULT_FONT_SIZE * 1.5, Black), __FUNCTION__);
                 }
 
                 if (xSemaphoreTake(buttons.lock, 0) == pdTRUE) {
