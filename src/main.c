@@ -638,6 +638,18 @@ void vDemoTask1(void *pvParameters)
     static int str_width = 0;
     static int number_buttons[4] = {0};
     static int flag_buttons[4] = {0};
+    static int text_position_beg = 0;
+    static int text_position_end = 0;
+    static int offset = 0;
+    static int change = 10;
+    static double time = 0;
+    static int window_x = 0, window_y = 0, lastMouseX, lastMouseY;
+    SDL_Window *window_t = NULL;
+    SDL_GetWindowPosition(window_t, &window_x, &window_y);
+    printf("%d      %d", window_x, window_y);
+
+    lastMouseX = tumEventGetMouseX();
+    lastMouseY = tumEventGetMouseY();
 
     while (1) {
         if (DrawSignal)
@@ -654,15 +666,15 @@ void vDemoTask1(void *pvParameters)
                 vDrawStaticItems();
                 //vDrawCave(tumEventGetMouseLeft());
                 //vDrawButtonText();
-
-                my_circle->x = SCREEN_WIDTH / 2 + SCREEN_WIDTH / 4 * (-1*cos(2*PI*FREQ*1));
-                my_circle->y = SCREEN_HEIGHT / 2 + SCREEN_HEIGHT / 4 * (-1*sin(2*PI*FREQ*1));
+                
+                my_circle->x = SCREEN_WIDTH / 2 + SCREEN_WIDTH / 4 * (-1*cos(2*PI*FREQ*time));
+                my_circle->y = SCREEN_HEIGHT / 2 + SCREEN_HEIGHT / 4 * (-1*sin(2*PI*FREQ*time));
                 checkDraw(tumDrawCircle(my_circle->x, my_circle->y, my_circle->radius, my_circle->colour), __FUNCTION__);
 
-                my_square_x = SCREEN_WIDTH / 2 - RADIUS + SCREEN_WIDTH / 4 * cos(2*PI*FREQ*1);
-                my_square_y = SCREEN_HEIGHT / 2 - RADIUS + SCREEN_HEIGHT / 4 * sin(2*PI*FREQ*1);
+                my_square_x = SCREEN_WIDTH / 2 - RADIUS + SCREEN_WIDTH / 4 * cos(2*PI*FREQ*time);
+                my_square_y = SCREEN_HEIGHT / 2 - RADIUS + SCREEN_HEIGHT / 4 * sin(2*PI*FREQ*time);
                 checkDraw(tumDrawFilledBox(my_square_x, my_square_y, 2*RADIUS, 2*RADIUS, TUMBlue), __FUNCTION__);
-
+                time = (double)xTaskGetTickCount() / 1000;
                 checkDraw(tumDrawTriangle(triangle_coords, Green), __FUNCTION__);
 
                 sprintf(str, "GG EZ PZ");
@@ -670,9 +682,21 @@ void vDemoTask1(void *pvParameters)
                     checkDraw(tumDrawText(str, SCREEN_WIDTH / 2 - str_width / 2, SCREEN_HEIGHT - DEFAULT_FONT_SIZE * 1.5, Black), __FUNCTION__);
                 }
 
+                sprintf(str, "THIS IS TOUGH");
+                if (!tumGetTextSize((char*)str, &str_width, NULL)){
+                    text_position_beg = SCREEN_WIDTH / 2 - str_width / 2 + offset;
+                    text_position_end = text_position_beg + str_width;
+                    if (text_position_end >= SCREEN_WIDTH || text_position_beg <= 0){
+                        change = -1 * change;
+                    }
+                    offset = offset + change;
+                    checkDraw(tumDrawText(str, text_position_beg, DEFAULT_FONT_SIZE * 3.5, Black), __FUNCTION__);
+                    
+                }
+
                 if (xSemaphoreTake(buttons.lock, 0) == pdTRUE) {
                     if (buttons.buttons[KEYCODE(A)]){
-                        if(flag_buttons[0] == 0){
+                        if (flag_buttons[0] == 0){
                             number_buttons[0]++;
                             flag_buttons[0] = 1;
                         }
@@ -680,7 +704,7 @@ void vDemoTask1(void *pvParameters)
                         flag_buttons[0] = 0;
                     }
                     if (buttons.buttons[KEYCODE(B)]){
-                        if(flag_buttons[1] == 0){
+                        if (flag_buttons[1] == 0){
                             number_buttons[1]++;
                             flag_buttons[1] = 1;
                         }
@@ -688,7 +712,7 @@ void vDemoTask1(void *pvParameters)
                         flag_buttons[1] = 0;
                     }
                     if (buttons.buttons[KEYCODE(C)]){
-                        if(flag_buttons[2] == 0){
+                        if (flag_buttons[2] == 0){
                             number_buttons[2]++;
                             flag_buttons[2] = 1;
                         }
@@ -696,7 +720,7 @@ void vDemoTask1(void *pvParameters)
                         flag_buttons[2] = 0;
                     }
                     if (buttons.buttons[KEYCODE(D)]){
-                        if(flag_buttons[3] == 0){
+                        if (flag_buttons[3] == 0){
                             number_buttons[3]++;
                             flag_buttons[3] = 1;
                         }
@@ -708,7 +732,7 @@ void vDemoTask1(void *pvParameters)
                     checkDraw(tumDrawText(str, 10, DEFAULT_FONT_SIZE * 0.5, Black), __FUNCTION__);
                 }
 
-                if(tumEventGetMouseLeft()){
+                if (tumEventGetMouseLeft()){
                     number_buttons[0] = 0;
                     number_buttons[1] = 0;
                     number_buttons[2] = 0;
@@ -717,6 +741,27 @@ void vDemoTask1(void *pvParameters)
 
                 sprintf(str, "Axis X: %d | Axis Y: %d", tumEventGetMouseX(), tumEventGetMouseY());
                 checkDraw(tumDrawText(str, 10, DEFAULT_FONT_SIZE * 1.5, Black), __FUNCTION__);
+
+                
+                if (window_x >= 0 && window_x < 1920 - SCREEN_WIDTH && window_y >= 0 && window_y < 1080 - SCREEN_HEIGHT){
+                    
+                    if (tumEventGetMouseX() - lastMouseX > 0){
+                        window_x = window_x + 5;
+                    } else if (tumEventGetMouseX() - lastMouseX < 0){
+                        window_x = window_x - 5;
+                    }
+                    if (tumEventGetMouseY() - lastMouseY > 0){
+                        window_y = window_y + 5;
+                    } else if (tumEventGetMouseY() - lastMouseY < 0){
+                        window_y = window_y - 5;
+                    }
+
+                    //SDL_SetWindowPosition(window_t, window_x, window_y);
+                    SDL_SetWindowPosition(window_t, 5, 5);
+                }
+
+                lastMouseX = tumEventGetMouseX();
+                lastMouseY = tumEventGetMouseY();
 
                 // Draw FPS in lower right corner
                 vDrawFPS();
