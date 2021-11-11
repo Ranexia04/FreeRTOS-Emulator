@@ -45,7 +45,7 @@
 #define CAVE_X CAVE_SIZE_X / 2
 #define CAVE_Y CAVE_SIZE_Y / 2
 #define CAVE_THICKNESS 25
-#define RADIUS 30
+#define RADIUS 50
 #define PI 3.14159265
 #define FREQ 1
 #define LOGO_FILENAME "freertos.jpg"
@@ -74,8 +74,8 @@ const unsigned char prev_state_signal = PREV_TASK;
 
 static TaskHandle_t StateMachine = NULL;
 static TaskHandle_t BufferSwap = NULL;
-static TaskHandle_t DemoTask1 = NULL;
-static TaskHandle_t DemoTask2 = NULL;
+static TaskHandle_t Task1 = NULL;
+static TaskHandle_t Task2 = NULL;
 //static TaskHandle_t UDPDemoTask = NULL;
 //static TaskHandle_t TCPDemoTask = NULL;
 //static TaskHandle_t MQDemoTask = NULL;
@@ -168,19 +168,19 @@ initial_state:
         if (state_changed) {
             switch (current_state) {
                 case STATE_ONE:
-                    if (DemoTask2) {
-                        vTaskSuspend(DemoTask2);
+                    if (Task2) {
+                        vTaskSuspend(Task2);
                     }
-                    if (DemoTask1) {
-                        vTaskResume(DemoTask1);
+                    if (Task1) {
+                        vTaskResume(Task1);
                     }
                     break;
                 case STATE_TWO:
-                    if (DemoTask1) {
-                        vTaskSuspend(DemoTask1);
+                    if (Task1) {
+                        vTaskSuspend(Task1);
                     }
-                    if (DemoTask2) {
-                        vTaskResume(DemoTask2);
+                    if (Task2) {
+                        vTaskResume(Task2);
                     }
                     break;
                 default:
@@ -515,141 +515,15 @@ void playBallSound(void *args)
     tumSoundPlaySample(a3);
 }
 
-void vDemoTask2(void *pvParameters)
+void Task1(void *pvParameters)
 {
-    TickType_t xLastWakeTime, prevWakeTime;
-    xLastWakeTime = xTaskGetTickCount();
-    prevWakeTime = xLastWakeTime;
-
-    ball_t *my_ball = createBall(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, Black,
-                                 20, 1000, &playBallSound, NULL);
-    setBallSpeed(my_ball, 250, 250, 0, SET_BALL_SPEED_AXES);
-
-    // Left wall
-    wall_t *left_wall =
-        createWall(CAVE_X - CAVE_THICKNESS, CAVE_Y, CAVE_THICKNESS,
-                   CAVE_SIZE_Y, 0.2, Red, NULL, NULL);
-    // Right wall
-    wall_t *right_wall =
-        createWall(CAVE_X + CAVE_SIZE_X, CAVE_Y, CAVE_THICKNESS,
-                   CAVE_SIZE_Y, 0.2, Red, NULL, NULL);
-    // Top wall
-    wall_t *top_wall =
-        createWall(CAVE_X - CAVE_THICKNESS, CAVE_Y - CAVE_THICKNESS,
-                   CAVE_SIZE_X + CAVE_THICKNESS * 2, CAVE_THICKNESS,
-                   0.2, Blue, NULL, NULL);
-    // Bottom wall
-    wall_t *bottom_wall =
-        createWall(CAVE_X - CAVE_THICKNESS, CAVE_Y + CAVE_SIZE_Y,
-                   CAVE_SIZE_X + CAVE_THICKNESS * 2, CAVE_THICKNESS,
-                   0.2, Blue, NULL, NULL);
-    unsigned char collisions = 0;
-
     prints("Task 1 init'd\n");
-
-    while (1) {
-        if (DrawSignal)
-            if (xSemaphoreTake(DrawSignal, portMAX_DELAY) ==
-                pdTRUE) {
-                xLastWakeTime = xTaskGetTickCount();
-
-                xGetButtonInput(); // Update global button data
-
-                xSemaphoreTake(ScreenLock, portMAX_DELAY);
-                // Clear screen
-                checkDraw(tumDrawClear(White), __FUNCTION__);
-
-                vDrawStaticItems();
-
-                // Draw the walls
-                checkDraw(tumDrawFilledBox(
-                              left_wall->x1, left_wall->y1,
-                              left_wall->w, left_wall->h,
-                              left_wall->colour),
-                          __FUNCTION__);
-                checkDraw(tumDrawFilledBox(right_wall->x1,
-                                           right_wall->y1,
-                                           right_wall->w,
-                                           right_wall->h,
-                                           right_wall->colour),
-                          __FUNCTION__);
-                checkDraw(tumDrawFilledBox(
-                              top_wall->x1, top_wall->y1,
-                              top_wall->w, top_wall->h,
-                              top_wall->colour),
-                          __FUNCTION__);
-                checkDraw(tumDrawFilledBox(bottom_wall->x1,
-                                           bottom_wall->y1,
-                                           bottom_wall->w,
-                                           bottom_wall->h,
-                                           bottom_wall->colour),
-                          __FUNCTION__);
-
-                // Check if ball has made a collision
-                collisions = checkBallCollisions(my_ball, NULL,
-                                                 NULL);
-                if (collisions) {
-                    prints("Collision\n");
-                }
-
-                // Update the balls position now that possible collisions have
-                // updated its speeds
-                updateBallPosition(
-                    my_ball, xLastWakeTime - prevWakeTime);
-
-                // Draw the ball
-                checkDraw(tumDrawCircle(my_ball->x, my_ball->y,
-                                        my_ball->radius,
-                                        my_ball->colour),
-                          __FUNCTION__);
-
-                // Draw FPS in lower right corner
-                vDrawFPS();
-
-                xSemaphoreGive(ScreenLock);
-
-                // Check for state change
-                vCheckStateInput();
-
-                // Keep track of when task last ran so that you know how many ticks
-                //(in our case miliseconds) have passed so that the balls position
-                // can be updated appropriatley
-                prevWakeTime = xLastWakeTime;
-            }
-    }
-}
-
-void vDemoTask1(void *pvParameters)
-{
-    coord_t *triangle_coords = (coord_t *)calloc(3, sizeof(coord_t));
-    triangle_coords[0].x=SCREEN_WIDTH/2 - RADIUS;
-    triangle_coords[0].y=SCREEN_HEIGHT/2 + RADIUS;
-    triangle_coords[1].x=SCREEN_WIDTH/2;
-    triangle_coords[1].y=SCREEN_HEIGHT/2 - RADIUS;
-    triangle_coords[2].x=SCREEN_WIDTH/2 + RADIUS;
-    triangle_coords[2].y=SCREEN_HEIGHT/2 + RADIUS;
-    static int my_square_x = 0;
-    static int my_square_y = 0;
 
     ball_t *my_circle = createBall(SCREEN_WIDTH / 4, SCREEN_HEIGHT / 2, Red,
                                  RADIUS, 1000, &playBallSound, NULL);
 
     static char str[100];
     static int str_width = 0;
-    static int number_buttons[4] = {0};
-    static int flag_buttons[4] = {0};
-    static int text_position_beg = 0;
-    static int text_position_end = 0;
-    static int offset = 0;
-    static int change = 10;
-    static double time = 0;
-    static int window_x = 0, window_y = 0, lastMouseX, lastMouseY;
-    SDL_Window *window_t = NULL;
-    SDL_GetWindowPosition(window_t, &window_x, &window_y);
-    printf("%d      %d", window_x, window_y);
-
-    lastMouseX = tumEventGetMouseX();
-    lastMouseY = tumEventGetMouseY();
 
     while (1) {
         if (DrawSignal)
@@ -667,101 +541,9 @@ void vDemoTask1(void *pvParameters)
                 //vDrawCave(tumEventGetMouseLeft());
                 //vDrawButtonText();
                 
-                my_circle->x = SCREEN_WIDTH / 2 + SCREEN_WIDTH / 4 * (-1*cos(2*PI*FREQ*time));
-                my_circle->y = SCREEN_HEIGHT / 2 + SCREEN_HEIGHT / 4 * (-1*sin(2*PI*FREQ*time));
+                my_circle->x = SCREEN_WIDTH / 2;
+                my_circle->y = SCREEN_HEIGHT / 2;
                 checkDraw(tumDrawCircle(my_circle->x, my_circle->y, my_circle->radius, my_circle->colour), __FUNCTION__);
-
-                my_square_x = SCREEN_WIDTH / 2 - RADIUS + SCREEN_WIDTH / 4 * cos(2*PI*FREQ*time);
-                my_square_y = SCREEN_HEIGHT / 2 - RADIUS + SCREEN_HEIGHT / 4 * sin(2*PI*FREQ*time);
-                checkDraw(tumDrawFilledBox(my_square_x, my_square_y, 2*RADIUS, 2*RADIUS, TUMBlue), __FUNCTION__);
-                time = (double)xTaskGetTickCount() / 1000;
-                checkDraw(tumDrawTriangle(triangle_coords, Green), __FUNCTION__);
-
-                sprintf(str, "GG EZ PZ");
-                if (!tumGetTextSize((char*)str, &str_width, NULL)){
-                    checkDraw(tumDrawText(str, SCREEN_WIDTH / 2 - str_width / 2, SCREEN_HEIGHT - DEFAULT_FONT_SIZE * 1.5, Black), __FUNCTION__);
-                }
-
-                sprintf(str, "THIS IS TOUGH");
-                if (!tumGetTextSize((char*)str, &str_width, NULL)){
-                    text_position_beg = SCREEN_WIDTH / 2 - str_width / 2 + offset;
-                    text_position_end = text_position_beg + str_width;
-                    if (text_position_end >= SCREEN_WIDTH || text_position_beg <= 0){
-                        change = -1 * change;
-                    }
-                    offset = offset + change;
-                    checkDraw(tumDrawText(str, text_position_beg, DEFAULT_FONT_SIZE * 3.5, Black), __FUNCTION__);
-                    
-                }
-
-                if (xSemaphoreTake(buttons.lock, 0) == pdTRUE) {
-                    if (buttons.buttons[KEYCODE(A)]){
-                        if (flag_buttons[0] == 0){
-                            number_buttons[0]++;
-                            flag_buttons[0] = 1;
-                        }
-                    } else {
-                        flag_buttons[0] = 0;
-                    }
-                    if (buttons.buttons[KEYCODE(B)]){
-                        if (flag_buttons[1] == 0){
-                            number_buttons[1]++;
-                            flag_buttons[1] = 1;
-                        }
-                    } else {
-                        flag_buttons[1] = 0;
-                    }
-                    if (buttons.buttons[KEYCODE(C)]){
-                        if (flag_buttons[2] == 0){
-                            number_buttons[2]++;
-                            flag_buttons[2] = 1;
-                        }
-                    } else {
-                        flag_buttons[2] = 0;
-                    }
-                    if (buttons.buttons[KEYCODE(D)]){
-                        if (flag_buttons[3] == 0){
-                            number_buttons[3]++;
-                            flag_buttons[3] = 1;
-                        }
-                    } else {
-                        flag_buttons[3] = 0;
-                    }
-                    sprintf(str, "A: %d | B: %d | C: %d | D: %d", number_buttons[0], number_buttons[1], number_buttons[2], number_buttons[3]);
-                    xSemaphoreGive(buttons.lock);
-                    checkDraw(tumDrawText(str, 10, DEFAULT_FONT_SIZE * 0.5, Black), __FUNCTION__);
-                }
-
-                if (tumEventGetMouseLeft()){
-                    number_buttons[0] = 0;
-                    number_buttons[1] = 0;
-                    number_buttons[2] = 0;
-                    number_buttons[3] = 0;
-                }
-
-                sprintf(str, "Axis X: %d | Axis Y: %d", tumEventGetMouseX(), tumEventGetMouseY());
-                checkDraw(tumDrawText(str, 10, DEFAULT_FONT_SIZE * 1.5, Black), __FUNCTION__);
-
-                
-                if (window_x >= 0 && window_x < 1920 - SCREEN_WIDTH && window_y >= 0 && window_y < 1080 - SCREEN_HEIGHT){
-                    
-                    if (tumEventGetMouseX() - lastMouseX > 0){
-                        window_x = window_x + 5;
-                    } else if (tumEventGetMouseX() - lastMouseX < 0){
-                        window_x = window_x - 5;
-                    }
-                    if (tumEventGetMouseY() - lastMouseY > 0){
-                        window_y = window_y + 5;
-                    } else if (tumEventGetMouseY() - lastMouseY < 0){
-                        window_y = window_y - 5;
-                    }
-
-                    //SDL_SetWindowPosition(window_t, window_x, window_y);
-                    SDL_SetWindowPosition(window_t, 5, 5);
-                }
-
-                lastMouseX = tumEventGetMouseX();
-                lastMouseY = tumEventGetMouseY();
 
                 // Draw FPS in lower right corner
                 vDrawFPS();
@@ -769,6 +551,34 @@ void vDemoTask1(void *pvParameters)
                 xSemaphoreGive(ScreenLock);
 
                 // Get input and check for state change
+                vCheckStateInput();
+            }
+    }
+}
+
+void Task2(void *pvParameters)
+{
+    prints("Task 2 init'd\n");
+
+    while (1) {
+        if (DrawSignal)
+            if (xSemaphoreTake(DrawSignal, portMAX_DELAY) ==
+                pdTRUE) {
+
+                xGetButtonInput(); // Update global button data
+
+                xSemaphoreTake(ScreenLock, portMAX_DELAY);
+                // Clear screen
+                checkDraw(tumDrawClear(White), __FUNCTION__);
+
+                vDrawStaticItems();
+
+                // Draw FPS in lower right corner
+                vDrawFPS();
+
+                xSemaphoreGive(ScreenLock);
+
+                // Check for state change
                 vCheckStateInput();
             }
     }
@@ -862,17 +672,16 @@ int main(int argc, char *argv[])
     }
 
     /** Demo Tasks */
-    if (xTaskCreate(vDemoTask1, "DemoTask1", mainGENERIC_STACK_SIZE * 2,
-                    NULL, mainGENERIC_PRIORITY, &DemoTask1) != pdPASS) {
+    if (xTaskCreate(Task1, "Task1", mainGENERIC_STACK_SIZE * 2,
+                    NULL, mainGENERIC_PRIORITY, &Task1) != pdPASS) {
         PRINT_TASK_ERROR("DemoTask1");
-        goto err_demotask1;
+        goto err_task1;
     }
 
-    
-    /*if (xTaskCreate(vDemoTask2, "DemoTask2", mainGENERIC_STACK_SIZE * 2,
-                    NULL, mainGENERIC_PRIORITY, &DemoTask2) != pdPASS) {
+    if (xTaskCreate(Task2, "Task2", mainGENERIC_STACK_SIZE * 2,
+                    NULL, mainGENERIC_PRIORITY, &Task2) != pdPASS) {
         PRINT_TASK_ERROR("DemoTask2");
-        goto err_demotask2;
+        goto err_task2;
     }
 
     /** SOCKETS */
@@ -896,9 +705,9 @@ int main(int argc, char *argv[])
 
     return EXIT_SUCCESS;
 
-    //err_demotask2:
-        //vTaskDelete(DemoTask1);
-    err_demotask1:
+    err_task2:
+        vTaskDelete(Task1);
+    err_task1:
         vTaskDelete(BufferSwap);
     err_bufferswap:
         vTaskDelete(StateMachine);
