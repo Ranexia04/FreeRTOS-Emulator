@@ -515,7 +515,7 @@ void playBallSound(void *args)
     tumSoundPlaySample(a3);
 }
 
-void Task1(void *pvParameters)
+void vTask1(void *pvParameters)
 {
     prints("Task 1 init'd\n");
 
@@ -556,7 +556,7 @@ void Task1(void *pvParameters)
     }
 }
 
-void Task2(void *pvParameters)
+void vTask2(void *pvParameters)
 {
     prints("Task 2 init'd\n");
 
@@ -672,13 +672,13 @@ int main(int argc, char *argv[])
     }
 
     /** Demo Tasks */
-    if (xTaskCreate(Task1, "Task1", mainGENERIC_STACK_SIZE * 2,
+    if (xTaskCreate(vTask1, "Task1", mainGENERIC_STACK_SIZE * 2,
                     NULL, mainGENERIC_PRIORITY, &Task1) != pdPASS) {
         PRINT_TASK_ERROR("DemoTask1");
         goto err_task1;
     }
 
-    if (xTaskCreate(Task2, "Task2", mainGENERIC_STACK_SIZE * 2,
+    if (xTaskCreate(vTask2, "Task2", mainGENERIC_STACK_SIZE * 2,
                     NULL, mainGENERIC_PRIORITY, &Task2) != pdPASS) {
         PRINT_TASK_ERROR("DemoTask2");
         goto err_task2;
