@@ -24,6 +24,7 @@
 
 #define mainGENERIC_PRIORITY (tskIDLE_PRIORITY)
 #define mainGENERIC_STACK_SIZE ((unsigned short)2560)
+#define STACK_SIZE 200
 
 #define STATE_QUEUE_LENGTH 1
 
@@ -31,6 +32,7 @@
 
 #define STATE_ONE 0
 #define STATE_TWO 1
+#define STATE_THREE 2
 
 #define NEXT_TASK 0
 #define PREV_TASK 1
@@ -76,6 +78,10 @@ static TaskHandle_t StateMachine = NULL;
 static TaskHandle_t BufferSwap = NULL;
 static TaskHandle_t Task1 = NULL;
 static TaskHandle_t Task2 = NULL;
+static TaskHandle_t Task3 = NULL;
+static TaskHandle_t Task4 = NULL;
+static StaticTask_t Task2Buffer;
+static StackType_t xStack[ STACK_SIZE ];
 //static TaskHandle_t UDPDemoTask = NULL;
 //static TaskHandle_t TCPDemoTask = NULL;
 //static TaskHandle_t MQDemoTask = NULL;
@@ -168,11 +174,17 @@ initial_state:
         if (state_changed) {
             switch (current_state) {
                 case STATE_ONE:
-                    if (Task2) {
-                        vTaskSuspend(Task2);
+                    if (Task3) {
+                        vTaskSuspend(Task3);
+                    }
+                    if (Task4) {
+                        vTaskSuspend(Task4);
                     }
                     if (Task1) {
                         vTaskResume(Task1);
+                    }
+                    if (Task2) {
+                        vTaskResume(Task2);
                     }
                     break;
                 case STATE_TWO:
@@ -180,7 +192,13 @@ initial_state:
                         vTaskSuspend(Task1);
                     }
                     if (Task2) {
-                        vTaskResume(Task2);
+                        vTaskSuspend(Task2);
+                    }
+                    if (Task3) {
+                        vTaskResume(Task3);
+                    }
+                    if (Task4) {
+                        vTaskResume(Task4);
                     }
                     break;
                 default:
@@ -384,8 +402,8 @@ void vDrawButtonText(void)
 static int vCheckStateInput(void)
 {
     if (xSemaphoreTake(buttons.lock, 0) == pdTRUE) {
-        if (buttons.buttons[KEYCODE(C)]) {
-            buttons.buttons[KEYCODE(C)] = 0;
+        if (buttons.buttons[KEYCODE(E)]) {
+            buttons.buttons[KEYCODE(E)] = 0;
             if (StateQueue) {
                 xSemaphoreGive(buttons.lock);
                 xQueueSend(StateQueue, &next_state_signal, 0);
@@ -515,6 +533,35 @@ void playBallSound(void *args)
     tumSoundPlaySample(a3);
 }
 
+int vCheckButtonInput(int key, int *n)
+{
+    if (xSemaphoreTake(buttons.lock, 0) == pdTRUE) {
+        if (buttons.buttons[key]) {
+
+            buttons.buttons[key] = 0;
+            (*n)++;
+            printf("%d\n", *n);
+            xSemaphoreGive(buttons.lock);
+            if (key == SDL_SCANCODE_R) {
+                if (Task4) {
+                    vTaskResume(Task4);
+                }
+                vTaskSuspend(Task3);
+                return 0;
+            } else if (key == SDL_SCANCODE_L) {
+                if (Task3) {
+                    vTaskResume(Task3);
+                }
+                vTaskSuspend(Task4);
+                return 0;
+            }
+        }
+        xSemaphoreGive(buttons.lock);
+        return -1;
+    }
+    return 1;
+}
+
 void vTask1(void *pvParameters)
 {
     prints("Task 1 init'd\n");
@@ -549,9 +596,12 @@ void vTask1(void *pvParameters)
                 vDrawFPS();
 
                 xSemaphoreGive(ScreenLock);
-
-                // Get input and check for state change
                 vCheckStateInput();
+                vTaskDelay(1000);
+                if (Task2) {
+                    vTaskResume(Task2);
+                }
+                vTaskSuspend(Task1);
             }
     }
 }
@@ -578,8 +628,75 @@ void vTask2(void *pvParameters)
 
                 xSemaphoreGive(ScreenLock);
 
-                // Check for state change
                 vCheckStateInput();
+                vTaskDelay(500);
+                if (Task1) {
+                    vTaskResume(Task1);
+                }
+                vTaskSuspend(Task2);
+            }
+    }
+}
+
+void vTask3(void *pvParameters)
+{
+    static int n1 = 0;
+
+    prints("Task 3 init'd\n");
+
+    while (1) {
+        if (DrawSignal)
+            if (xSemaphoreTake(DrawSignal, portMAX_DELAY) ==
+                pdTRUE) {
+
+                xGetButtonInput(); // Update global button data
+
+                xSemaphoreTake(ScreenLock, portMAX_DELAY);
+                // Clear screen
+                checkDraw(tumDrawClear(White), __FUNCTION__);
+
+                checkDraw(tumDrawCircle(200, 200, 30, Blue), __FUNCTION__);
+
+                vDrawStaticItems();
+
+                // Draw FPS in lower right corner
+                vDrawFPS();
+
+                xSemaphoreGive(ScreenLock);
+                vCheckStateInput();
+
+                vCheckButtonInput(KEYCODE(R), &n1);
+            }
+    }
+}
+
+void vTask4(void *pvParameters)
+{
+    int n2 = 0;
+    prints("Task 4 init'd\n");
+
+    while (1) {
+        if (DrawSignal)
+            if (xSemaphoreTake(DrawSignal, portMAX_DELAY) ==
+                pdTRUE) {
+
+                xGetButtonInput(); // Update global button data
+
+                xSemaphoreTake(ScreenLock, portMAX_DELAY);
+                // Clear screen
+                checkDraw(tumDrawClear(White), __FUNCTION__);
+
+                checkDraw(tumDrawCircle(200, 200, 30, Black), __FUNCTION__);
+
+                vDrawStaticItems();
+
+                // Draw FPS in lower right corner
+                vDrawFPS();
+
+                xSemaphoreGive(ScreenLock);
+
+                vCheckStateInput();
+                vCheckButtonInput(KEYCODE(L), &n2);
             }
     }
 }
@@ -673,16 +790,30 @@ int main(int argc, char *argv[])
 
     /** Demo Tasks */
     if (xTaskCreate(vTask1, "Task1", mainGENERIC_STACK_SIZE * 2,
-                    NULL, mainGENERIC_PRIORITY, &Task1) != pdPASS) {
-        PRINT_TASK_ERROR("DemoTask1");
+                    NULL, mainGENERIC_PRIORITY + 5, &Task1) != pdPASS) {
+        PRINT_TASK_ERROR("Task1");
         goto err_task1;
     }
 
-    if (xTaskCreate(vTask2, "Task2", mainGENERIC_STACK_SIZE * 2,
-                    NULL, mainGENERIC_PRIORITY, &Task2) != pdPASS) {
-        PRINT_TASK_ERROR("DemoTask2");
+    Task2 = xTaskCreateStatic(vTask2, "Task2", STACK_SIZE,
+                    NULL, mainGENERIC_PRIORITY + 4, xStack, &Task2Buffer);
+    if (Task2 == NULL) {
+        PRINT_TASK_ERROR("Task2");
         goto err_task2;
     }
+
+    if (xTaskCreate(vTask3, "Task3", mainGENERIC_STACK_SIZE * 2,
+                    NULL, mainGENERIC_PRIORITY + 3, &Task3) != pdPASS) {
+        PRINT_TASK_ERROR("Task1");
+        goto err_task3;
+    }
+
+    if (xTaskCreate(vTask4, "Task4", mainGENERIC_STACK_SIZE * 2,
+                    NULL, mainGENERIC_PRIORITY + 2, &Task4) != pdPASS) {
+        PRINT_TASK_ERROR("Task1");
+        goto err_task4;
+    }
+    
 
     /** SOCKETS */
     /*xTaskCreate(vUDPDemoTask, "UDPTask", mainGENERIC_STACK_SIZE * 2, NULL,
@@ -705,6 +836,10 @@ int main(int argc, char *argv[])
 
     return EXIT_SUCCESS;
 
+    err_task4:
+        vTaskDelete(Task3);
+    err_task3:
+        vTaskDelete(Task2);
     err_task2:
         vTaskDelete(Task1);
     err_task1:

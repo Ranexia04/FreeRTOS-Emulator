@@ -580,7 +580,7 @@ static void prvAddNewTaskToReadyList(TCB_t *pxNewTCB) PRIVILEGED_FUNCTION;
 
 /*-----------------------------------------------------------*/
 
-#if( configSUPPORT_STATIC_ALLOCATION == 1 )
+#if( configSUPPORT_STATIC_ALLOCATION == 0 )
 
 TaskHandle_t xTaskCreateStatic(TaskFunction_t pxTaskCode,
                                const char *const pcName,
