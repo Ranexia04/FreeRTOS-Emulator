@@ -533,33 +533,25 @@ void playBallSound(void *args)
     tumSoundPlaySample(a3);
 }
 
-int vCheckButtonInput(int key, int *n)
+int vCheckButtonInput(int key, int *n, int *button_flag)
 {
     if (xSemaphoreTake(buttons.lock, 0) == pdTRUE) {
-        if (buttons.buttons[key]) {
-
+        if (buttons.buttons[key] && *button_flag == 0) {
             buttons.buttons[key] = 0;
+            *button_flag = 1;
             (*n)++;
             printf("%d\n", *n);
             xSemaphoreGive(buttons.lock);
-            if (key == SDL_SCANCODE_R) {
-                if (Task4) {
-                    vTaskResume(Task4);
-                }
-                vTaskSuspend(Task3);
-                return 0;
-            } else if (key == SDL_SCANCODE_L) {
-                if (Task3) {
-                    vTaskResume(Task3);
-                }
-                vTaskSuspend(Task4);
-                return 0;
-            }
+            return 1;
+        } else if (buttons.buttons[key] && *button_flag == 1) {
+            xSemaphoreGive(buttons.lock);
+            return 0;
         }
+        *button_flag = 0;
         xSemaphoreGive(buttons.lock);
-        return -1;
+        return 0;
     }
-    return 1;
+    return 0;
 }
 
 void vTask1(void *pvParameters)
@@ -640,7 +632,7 @@ void vTask2(void *pvParameters)
 
 void vTask3(void *pvParameters)
 {
-    static int n1 = 0;
+    int n1 = 0, button_flag = 0;
 
     prints("Task 3 init'd\n");
 
@@ -664,15 +656,20 @@ void vTask3(void *pvParameters)
 
                 xSemaphoreGive(ScreenLock);
                 vCheckStateInput();
-
-                vCheckButtonInput(KEYCODE(R), &n1);
+                
+                vCheckButtonInput(KEYCODE(R), &n1, &button_flag);
+                
+                if (Task4) {
+                    vTaskResume(Task4);
+                }
+                vTaskSuspend(Task3);
             }
     }
 }
 
 void vTask4(void *pvParameters)
 {
-    int n2 = 0;
+    int n2 = 0, button_flag = 0;
     prints("Task 4 init'd\n");
 
     while (1) {
@@ -696,7 +693,13 @@ void vTask4(void *pvParameters)
                 xSemaphoreGive(ScreenLock);
 
                 vCheckStateInput();
-                vCheckButtonInput(KEYCODE(L), &n2);
+
+                vCheckButtonInput(KEYCODE(L), &n2, &button_flag);
+
+                if (Task3) {
+                    vTaskResume(Task3);
+                }
+                vTaskSuspend(Task4);
             }
     }
 }
@@ -747,8 +750,7 @@ int main(int argc, char *argv[])
     logo_image = tumDrawLoadImage(LOGO_FILENAME);
 
     atexit(aIODeinit);
-
-    //Load a second font for fun
+//Load a second font for fun
     tumFontLoadFont(FPS_FONT, DEFAULT_FONT_SIZE);
 
     buttons.lock = xSemaphoreCreateMutex(); // Locking mechanism
@@ -788,81 +790,67 @@ int main(int argc, char *argv[])
         goto err_bufferswap;
     }
 
-    /** Demo Tasks */
+    /** Tasks */
     if (xTaskCreate(vTask1, "Task1", mainGENERIC_STACK_SIZE * 2,
-                    NULL, mainGENERIC_PRIORITY + 5, &Task1) != pdPASS) {
-        PRINT_TASK_ERROR("Task1");
+                    NULL, mainGENERIC_PRIORITY + 1, &Task1) != pdPASS) {
+        PRINT_TASK_ERROR("DemoTask1");
         goto err_task1;
     }
-
-    Task2 = xTaskCreateStatic(vTask2, "Task2", STACK_SIZE,
-                    NULL, mainGENERIC_PRIORITY + 4, xStack, &Task2Buffer);
-    if (Task2 == NULL) {
-        PRINT_TASK_ERROR("Task2");
+    if (xTaskCreate(vTask2, "Task2", mainGENERIC_STACK_SIZE * 2,
+                    NULL, mainGENERIC_PRIORITY + 2, &Task2) != pdPASS) {
+        PRINT_TASK_ERROR("DemoTask2");
         goto err_task2;
     }
 
     if (xTaskCreate(vTask3, "Task3", mainGENERIC_STACK_SIZE * 2,
                     NULL, mainGENERIC_PRIORITY + 3, &Task3) != pdPASS) {
-        PRINT_TASK_ERROR("Task1");
+        PRINT_TASK_ERROR("DemoTask1");
         goto err_task3;
     }
-
     if (xTaskCreate(vTask4, "Task4", mainGENERIC_STACK_SIZE * 2,
-                    NULL, mainGENERIC_PRIORITY + 2, &Task4) != pdPASS) {
-        PRINT_TASK_ERROR("Task1");
+                    NULL, mainGENERIC_PRIORITY + 4, &Task4) != pdPASS) {
+        PRINT_TASK_ERROR("DemoTask2");
         goto err_task4;
     }
-    
 
-    /** SOCKETS */
-    /*xTaskCreate(vUDPDemoTask, "UDPTask", mainGENERIC_STACK_SIZE * 2, NULL,
-                configMAX_PRIORITIES - 1, &UDPDemoTask);
-    /*xTaskCreate(vTCPDemoTask, "TCPTask", mainGENERIC_STACK_SIZE, NULL,
-                configMAX_PRIORITIES - 1, &TCPDemoTask);
+    vTaskSuspend(Task1);
+    vTaskSuspend(Task2);
+    vTaskSuspend(Task3);
+    vTaskSuspend(Task4);
 
-    /** POSIX MESSAGE QUEUES */
-    /*xTaskCreate(vMQDemoTask, "MQTask", mainGENERIC_STACK_SIZE * 2, NULL,
-                configMAX_PRIORITIES - 1, &MQDemoTask);
-    xTaskCreate(vDemoSendTask, "SendTask", mainGENERIC_STACK_SIZE * 2, NULL,
-                configMAX_PRIORITIES - 1, &DemoSendTask);*/
-    
-    //vTaskSuspend(DemoTask1);
-    //vTaskSuspend(DemoTask2);
-
-    //tumFUtilPrintTaskStateList();
+    tumFUtilPrintTaskStateList();
 
     vTaskStartScheduler();
 
     return EXIT_SUCCESS;
 
-    err_task4:
-        vTaskDelete(Task3);
-    err_task3:
-        vTaskDelete(Task2);
-    err_task2:
-        vTaskDelete(Task1);
-    err_task1:
-        vTaskDelete(BufferSwap);
-    err_bufferswap:
-        vTaskDelete(StateMachine);
-    err_statemachine:
-        vQueueDelete(StateQueue);
-    err_state_queue:
-        vSemaphoreDelete(ScreenLock);
-    err_screen_lock:
-        vSemaphoreDelete(DrawSignal);
-    err_draw_signal:
-        vSemaphoreDelete(buttons.lock);
-    err_buttons_lock:
-        tumSoundExit();
-    err_init_audio:
-        tumEventExit();
-    err_init_events:
-        tumDrawExit();
-    err_init_drawing:
-        safePrintExit();
-    err_init_safe_print:
+err_task4:
+    vTaskDelete(Task3);
+err_task3:
+    vTaskDelete(Task2);
+err_task2:
+    vTaskDelete(Task1);
+err_task1:
+    vTaskDelete(BufferSwap);
+err_bufferswap:
+    vTaskDelete(StateMachine);
+err_statemachine:
+    vQueueDelete(StateQueue);
+err_state_queue:
+    vSemaphoreDelete(ScreenLock);
+err_screen_lock:
+    vSemaphoreDelete(DrawSignal);
+err_draw_signal:
+    vSemaphoreDelete(buttons.lock);
+err_buttons_lock:
+    tumSoundExit();
+err_init_audio:
+    tumEventExit();
+err_init_events:
+    tumDrawExit();
+err_init_drawing:
+    safePrintExit();
+err_init_safe_print:
     return EXIT_FAILURE;
 }
 
