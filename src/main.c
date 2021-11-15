@@ -23,7 +23,7 @@
 
 #define mainGENERIC_PRIORITY (tskIDLE_PRIORITY)
 #define mainGENERIC_STACK_SIZE ((unsigned short)2560)
-#define STACK_SIZE 2000
+#define STACK_SIZE mainGENERIC_STACK_SIZE * 2
 
 #define STATE_QUEUE_LENGTH 1
 
@@ -148,7 +148,6 @@ static int vCheckStateInput(void)
             return -1;
         }
         xSemaphoreGive(buttons.lock);
-        //vTaskDelay(20);
     }
 
     return 0;
@@ -169,9 +168,6 @@ void basicSequentialStateMachine(void *pvParameters)
     TickType_t last_change = xTaskGetTickCount();
 
     while (1) {
-        printf("Checking state change\n");
-        xGetButtonInput();
-        vCheckStateInput();
         if (state_changed) {
             goto initial_state;
         }
@@ -190,7 +186,7 @@ void basicSequentialStateMachine(void *pvParameters)
 initial_state:
         // Handle current state
         if (state_changed) {
-            printf("State changed\n");
+            prints("State changed\n");
             switch (current_state) {
                 case STATE_ONE:
                     if (Task3) {
@@ -205,8 +201,10 @@ initial_state:
                     if (Task2) {
                         vTaskResume(Task2);
                     }
+                    checkDraw(tumDrawClear(White), __FUNCTION__);
                     break;
                 case STATE_TWO:
+                    prints("hello stage 2");
                     if (Task1) {
                         vTaskSuspend(Task1);
                     }
@@ -219,6 +217,7 @@ initial_state:
                     if (Task4) {
                         vTaskResume(Task4);
                     }
+                    checkDraw(tumDrawClear(White), __FUNCTION__);
                     break;
                 default:
                     break;
@@ -296,14 +295,15 @@ void vSwapBuffers(void *pvParameters)
     tumDrawBindThread(); // Setup Rendering handle with correct GL context
 
     while (1) {
-        printf("Attempt to change frame\n");
+        vCheckStateInput();
+        prints("Attempt to change frame\n");
         if (xSemaphoreTake(ScreenLock, portMAX_DELAY) == pdTRUE) {
-            printf("Frame changed\n");
-            vDrawFPS();
+            prints("Frame changed\n");
             tumDrawUpdateScreen();
             tumEventFetchEvents(FETCH_EVENT_BLOCK);
             xSemaphoreGive(ScreenLock);
             //xSemaphoreGive(DrawSignal);
+            
             vTaskDelayUntil(&xLastWakeTime,
                             pdMS_TO_TICKS(frameratePeriod));
         }
@@ -393,7 +393,7 @@ int vCheckButtonInput(int key, int *n, int *button_flag)
             buttons.buttons[key] = 0;
             *button_flag = 1;
             (*n)++;
-            printf("%d\n", *n);
+            prints("%d\n", *n);
             xSemaphoreGive(buttons.lock);
             return 1;
         } else if (buttons.buttons[key] && *button_flag == 1) {
@@ -410,7 +410,7 @@ int vCheckButtonInput(int key, int *n, int *button_flag)
 void vTask1(void *pvParameters)
 {
     TickType_t xLastWakeTime;
-    printf("Task 1 init'd\n");
+    prints("Task 1 init'd\n");
 
     ball_t *my_circle = createBall(SCREEN_WIDTH / 4, SCREEN_HEIGHT / 2, Red,
                                  RADIUS, 1000, &playBallSound, NULL);
@@ -423,32 +423,33 @@ void vTask1(void *pvParameters)
     while (1) {
         //if (DrawSignal)
             //if (xSemaphoreTake(DrawSignal, portMAX_DELAY) == pdTRUE) {
-                printf("hello 1\n");
+                prints("hello 1\n");
                 xGetButtonInput(); // Update global input
+                //vDrawFPS();
 
-                xSemaphoreTake(ScreenLock, portMAX_DELAY);
-                printf("Draw circle 1\n");
+                //if (xSemaphoreTake(ScreenLock, portMAX_DELAY) == pdTRUE) {
+                    prints("Draw circle 1\n");
 
-                // Clear screen
-                //checkDraw(tumDrawClear(White), __FUNCTION__);
-                vDrawStaticItems();
+                    // Clear screen
+                    //checkDraw(tumDrawClear(White), __FUNCTION__);
+                    vDrawStaticItems();
                 
-                checkDraw(tumDrawCircle(my_circle->x, my_circle->y, my_circle->radius, my_circle->colour), __FUNCTION__);
-                xSemaphoreGive(ScreenLock);
-                vTaskDelayUntil(&xLastWakeTime, 500);
-                printf("Back to work 1\n");
-                xSemaphoreTake(ScreenLock, portMAX_DELAY);
-                printf("Delete circle 1\n");
-                checkDraw(tumDrawCircle(my_circle2->x, my_circle2->y, my_circle2->radius, my_circle2->colour), __FUNCTION__);
-                xSemaphoreGive(ScreenLock);
-                vTaskDelayUntil(&xLastWakeTime, 500);
+                    checkDraw(tumDrawCircle(my_circle->x, my_circle->y, my_circle->radius, my_circle->colour), __FUNCTION__);
+                    //xSemaphoreGive(ScreenLock);
+                    vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(500));
+                    prints("Back to work 1\n");
+                //}
                 
-                // Draw FPS in lower right corner
-                
+                //if (xSemaphoreTake(ScreenLock, portMAX_DELAY) == pdTRUE) {
+                    prints("Delete circle 1\n");
+                    checkDraw(tumDrawCircle(my_circle2->x, my_circle2->y, my_circle2->radius, my_circle2->colour), __FUNCTION__);
+                    //xSemaphoreGive(ScreenLock);
+                    vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(500));
+                //}
 
-                //xSemaphoreGive(ScreenLock);
                 //vCheckStateInput();
-                printf("bye 1\n");
+                prints("bye 1\n");
+                
             //}
     }
 }
@@ -456,7 +457,7 @@ void vTask1(void *pvParameters)
 void vTask2(void *pvParameters)
 {
     TickType_t xLastWakeTime;
-    printf("Task 2 init'd\n");
+    prints("Task 2 init'd\n");
 
     ball_t *my_circle = createBall(SCREEN_WIDTH * 3/4, SCREEN_HEIGHT / 2, Green,
                                  RADIUS, 1000, &playBallSound, NULL);
@@ -469,31 +470,27 @@ void vTask2(void *pvParameters)
     while (1) {
         //if (DrawSignal)
             //if (xSemaphoreTake(DrawSignal, portMAX_DELAY) == pdTRUE) {
-                printf("hello 2\n");
-
+                prints("hello 2\n");
                 xGetButtonInput(); // Update global button data
 
-                xSemaphoreTake(ScreenLock, portMAX_DELAY);
-                printf("Draw circle 2\n");
-                //checkDraw(tumDrawClear(White), __FUNCTION__);
+                //if (xSemaphoreTake(ScreenLock, portMAX_DELAY) == pdTRUE) {
+                    prints("Draw circle 2\n");
+                    checkDraw(tumDrawCircle(my_circle->x, my_circle->y, my_circle->radius, my_circle->colour), __FUNCTION__);
+                    //xSemaphoreGive(ScreenLock);
+                    vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(250));
+                    prints("Back to work 2\n");
+                //}
 
-                vDrawStaticItems();
-
-                checkDraw(tumDrawCircle(my_circle->x, my_circle->y, my_circle->radius, my_circle->colour), __FUNCTION__);
-                xSemaphoreGive(ScreenLock);
-                vTaskDelayUntil(&xLastWakeTime, 250);
-                printf("Back to work 2\n");
-                xSemaphoreTake(ScreenLock, portMAX_DELAY);
-                printf("Delete circle 2\n");
-                checkDraw(tumDrawCircle(my_circle2->x, my_circle2->y, my_circle2->radius, my_circle2->colour), __FUNCTION__);
-                xSemaphoreGive(ScreenLock);
-                vTaskDelayUntil(&xLastWakeTime, 250);
-  
-                // Draw FPS in lower right corner
-                
+                //if (xSemaphoreTake(ScreenLock, portMAX_DELAY) == pdTRUE) {
+                    prints("Delete circle 2\n");
+                    checkDraw(tumDrawCircle(my_circle2->x, my_circle2->y, my_circle2->radius, my_circle2->colour), __FUNCTION__);
+                    //xSemaphoreGive(ScreenLock);
+                    vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(250));
+                //}
 
                 //vCheckStateInput();
-                printf("bye 2\n");
+                prints("bye 2\n");
+
             //}
     }
 }
@@ -503,13 +500,12 @@ void vTask3(void *pvParameters)
     prints("Task 3 init'd\n");
 
     while (1) {
-        if (DrawSignal)
-            if (xSemaphoreTake(DrawSignal, portMAX_DELAY) ==
-                pdTRUE) {
-                printf("hello 3\n");
+        //if (DrawSignal)
+            //if (xSemaphoreTake(DrawSignal, portMAX_DELAY) ==pdTRUE) {
+                prints("hello 3\n");
                 xGetButtonInput(); // Update global button data
 
-                if (xSemaphoreTake(buttons.lock, portMAX_DELAY) == pdTRUE) {
+                /*if (xSemaphoreTake(buttons.lock, portMAX_DELAY) == pdTRUE) {
                     if (buttons.buttons[KEYCODE(L)]) {
                         xSemaphoreTake(ScreenLock, portMAX_DELAY);
                         // Clear screen
@@ -520,15 +516,15 @@ void vTask3(void *pvParameters)
                         vDrawStaticItems();
 
                         // Draw FPS in lower right corner
-                        vDrawFPS();
+                        //vDrawFPS();
 
                         xSemaphoreGive(ScreenLock);
                     }
                     xSemaphoreGive(buttons.lock);
-                }
+                }*/
                 
                 //vCheckStateInput();
-            }
+            //}
     }
 }
 
@@ -537,13 +533,12 @@ void vTask4(void *pvParameters)
     prints("Task 4 init'd\n");
 
     while (1) {
-        if (DrawSignal)
-            if (xSemaphoreTake(DrawSignal, portMAX_DELAY) ==
-                pdTRUE) {
-                printf("hello 4\n");
+        //if (DrawSignal)
+            //if (xSemaphoreTake(DrawSignal, portMAX_DELAY) == pdTRUE) {
+                prints("hello 4\n");
                 xGetButtonInput(); // Update global button data
 
-                if (xSemaphoreTake(buttons.lock, portMAX_DELAY) == pdTRUE) {
+                /*if (xSemaphoreTake(buttons.lock, portMAX_DELAY) == pdTRUE) {
                     if (buttons.buttons[KEYCODE(R)]) {
                         xSemaphoreTake(ScreenLock, portMAX_DELAY);
                         // Clear screen
@@ -554,15 +549,15 @@ void vTask4(void *pvParameters)
                         vDrawStaticItems();
 
                         // Draw FPS in lower right corner
-                        vDrawFPS();
+                        //vDrawFPS();
 
                         xSemaphoreGive(ScreenLock);
                     }
                     xSemaphoreGive(buttons.lock);
-                }
+                }*/
 
                 //vCheckStateInput();
-            }
+            //}
     }
 }
 
@@ -653,7 +648,7 @@ int main(int argc, char *argv[])
         goto err_bufferswap;
     }
 
-    /** Demo Tasks */
+    /* Tasks */
     if (xTaskCreate(vTask1, "Task1", mainGENERIC_STACK_SIZE * 2,
                     NULL, mainGENERIC_PRIORITY + 5, &Task1) != pdPASS) {
         PRINT_TASK_ERROR("Task1");
@@ -678,8 +673,6 @@ int main(int argc, char *argv[])
         PRINT_TASK_ERROR("Task4");
         goto err_task4;
     }
-    
-    //tumFUtilPrintTaskStateList();
 
     vTaskStartScheduler();
 
