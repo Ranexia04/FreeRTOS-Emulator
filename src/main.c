@@ -31,7 +31,7 @@
 
 #define STATE_ONE 0
 #define STATE_TWO 1
-#define STATE_THREE 2
+//#define STATE_THREE 2
 
 #define NEXT_TASK 0
 #define PREV_TASK 1
@@ -41,22 +41,8 @@
 #define STATE_DEBOUNCE_DELAY 300
 
 #define KEYCODE(CHAR) SDL_SCANCODE_##CHAR
-#define CAVE_SIZE_X SCREEN_WIDTH / 2
-#define CAVE_SIZE_Y SCREEN_HEIGHT / 2
-#define CAVE_X CAVE_SIZE_X / 2
-#define CAVE_Y CAVE_SIZE_Y / 2
-#define CAVE_THICKNESS 25
 #define RADIUS 50
-#define PI 3.14159265
-#define FREQ 1
 #define LOGO_FILENAME "freertos.jpg"
-#define UDP_BUFFER_SIZE 2000
-#define UDP_TEST_PORT_1 1234
-#define UDP_TEST_PORT_2 4321
-#define MSG_QUEUE_BUFFER_SIZE 1000
-#define MSG_QUEUE_MAX_MSG_COUNT 10
-#define TCP_BUFFER_SIZE 2000
-#define TCP_TEST_PORT 2222
 
 #ifdef TRACE_FUNCTIONS
 #include "tracer.h"
@@ -271,8 +257,6 @@ initial_state:
                     if (Task4) {
                         vTaskResume(Task4);
                     }
-                    checkDraw(tumDrawClear(White), __FUNCTION__);
-                    vDrawStaticItems();
                     break;
                 default:
                     break;
@@ -382,8 +366,8 @@ int vCheckButtonInput(int key)
 void vSolutionSwaper(void *pvParameters)
 {
     while (1) {
-        tumEventFetchEvents(FETCH_EVENT_BLOCK |
-                                    FETCH_EVENT_NO_GL_CHECK);
+        /*tumEventFetchEvents(FETCH_EVENT_BLOCK |
+                                    FETCH_EVENT_NO_GL_CHECK);*/
         xGetButtonInput();
         vCheckStateInput();
         vCheckButtonInput(KEYCODE(3));
@@ -391,38 +375,6 @@ void vSolutionSwaper(void *pvParameters)
         vTaskDelay(pdMS_TO_TICKS(1));
         //vDrawFPS();
     }
-}
-
-void vDrawCaveBoundingBox(void)
-{
-    checkDraw(tumDrawFilledBox(CAVE_X - CAVE_THICKNESS,
-                               CAVE_Y - CAVE_THICKNESS,
-                               CAVE_SIZE_X + CAVE_THICKNESS * 2,
-                               CAVE_SIZE_Y + CAVE_THICKNESS * 2, TUMBlue),
-              __FUNCTION__);
-
-    checkDraw(tumDrawFilledBox(CAVE_X, CAVE_Y, CAVE_SIZE_X, CAVE_SIZE_Y,
-                               Aqua),
-              __FUNCTION__);
-}
-
-void vDrawCave(unsigned char ball_color_inverted)
-{
-    static unsigned short circlePositionX, circlePositionY;
-
-    vDrawCaveBoundingBox();
-
-    circlePositionX = CAVE_X + tumEventGetMouseX() / 2;
-    circlePositionY = CAVE_Y + tumEventGetMouseY() / 2;
-
-    if (ball_color_inverted)
-        checkDraw(tumDrawCircle(circlePositionX, circlePositionY, 20,
-                                Black),
-                  __FUNCTION__);
-    else
-        checkDraw(tumDrawCircle(circlePositionX, circlePositionY, 20,
-                                Silver),
-                  __FUNCTION__);
 }
 
 void playBallSound(void *args)
@@ -616,8 +568,6 @@ int main(int argc, char *argv[])
 
     logo_image = tumDrawLoadImage(LOGO_FILENAME);
 
-    atexit(aIODeinit);
-
     //Load a second font for fun
     tumFontLoadFont(FPS_FONT, DEFAULT_FONT_SIZE);
 
@@ -631,6 +581,12 @@ int main(int argc, char *argv[])
     if (!buttons.lock) {
         PRINT_ERROR("Failed to create buttons lock");
         goto err_buttons_lock;
+    }
+
+    solution3.lock = xSemaphoreCreateMutex();
+    if (!solution3.lock) {
+        PRINT_ERROR("Failed to create solution3 lock");
+        goto err_solution3_lock;
     }
 
     DrawSignal = xSemaphoreCreateBinary(); // Screen buffer locking
@@ -665,7 +621,7 @@ int main(int argc, char *argv[])
     }
 
     if (xTaskCreate(vSolutionSwaper, "SolutionSwaper",
-                    mainGENERIC_STACK_SIZE * 2, NULL, mainGENERIC_PRIORITY + 7,
+                    mainGENERIC_STACK_SIZE * 2, NULL, configMAX_PRIORITIES - 3,
                     SolutionSwaper) != pdPASS) {
         PRINT_TASK_ERROR("SolutionSwaper");
         goto err_solutionswaper;
@@ -697,6 +653,11 @@ int main(int argc, char *argv[])
         goto err_task4;
     }
 
+    vTaskSuspend(Task1);
+    vTaskSuspend(Task2);
+    vTaskSuspend(Task3);
+    vTaskSuspend(Task4);
+
     vTaskStartScheduler();
 
     return EXIT_SUCCESS;
@@ -720,6 +681,8 @@ int main(int argc, char *argv[])
     err_screen_lock:
         vSemaphoreDelete(DrawSignal);
     err_draw_signal:
+        vSemaphoreDelete(solution3.lock);
+    err_solution3_lock:    
         vSemaphoreDelete(buttons.lock);
     err_buttons_lock:
         vSemaphoreDelete(SyncSignal);
