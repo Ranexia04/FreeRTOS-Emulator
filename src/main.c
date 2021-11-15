@@ -78,6 +78,7 @@ static StackType_t xStack[ STACK_SIZE ];
 static QueueHandle_t StateQueue = NULL;
 static SemaphoreHandle_t DrawSignal = NULL;
 static SemaphoreHandle_t ScreenLock = NULL;
+static SemaphoreHandle_t SyncSignal = NULL;
 
 static image_handle_t logo_image = NULL;
 
@@ -87,6 +88,14 @@ typedef struct buttons_buffer {
 } buttons_buffer_t;
 
 static buttons_buffer_t buttons = { 0 };
+
+typedef struct solution3_buffer {
+    int n3;
+    int n4;
+    SemaphoreHandle_t lock;
+} solution3_buffer_t;
+
+static solution3_buffer_t solution3 = { 0 };
 
 void checkDraw(unsigned char status, const char *msg)
 {
@@ -353,6 +362,23 @@ void vSwapBuffers(void *pvParameters)
     }
 }
 
+int vCheckButtonInput(int key)
+{
+    if (xSemaphoreTake(buttons.lock, 0) == pdTRUE) {
+        if (buttons.buttons[key]) {
+            buttons.buttons[key] = 0;
+            xSemaphoreGive(buttons.lock);
+            if (key == KEYCODE(3))
+                xSemaphoreGive(SyncSignal);
+            if (key == KEYCODE(4))
+                xTaskNotifyGive(Task4);
+            return 0;
+        }
+        xSemaphoreGive(buttons.lock);
+    }
+    return 0;
+}
+
 void vSolutionSwaper(void *pvParameters)
 {
     while (1) {
@@ -360,6 +386,8 @@ void vSolutionSwaper(void *pvParameters)
                                     FETCH_EVENT_NO_GL_CHECK);
         xGetButtonInput();
         vCheckStateInput();
+        vCheckButtonInput(KEYCODE(3));
+        vCheckButtonInput(KEYCODE(4));
         vTaskDelay(pdMS_TO_TICKS(1));
         //vDrawFPS();
     }
@@ -400,27 +428,6 @@ void vDrawCave(unsigned char ball_color_inverted)
 void playBallSound(void *args)
 {
     tumSoundPlaySample(a3);
-}
-
-int vCheckButtonInput(int key, int *n, int *button_flag)
-{
-    if (xSemaphoreTake(buttons.lock, 0) == pdTRUE) {
-        if (buttons.buttons[key] && *button_flag == 0) {
-            buttons.buttons[key] = 0;
-            *button_flag = 1;
-            (*n)++;
-            prints("%d\n", *n);
-            xSemaphoreGive(buttons.lock);
-            return 1;
-        } else if (buttons.buttons[key] && *button_flag == 1) {
-            xSemaphoreGive(buttons.lock);
-            return 0;
-        }
-        *button_flag = 0;
-        xSemaphoreGive(buttons.lock);
-        return 0;
-    }
-    return 0;
 }
 
 void vTask1(void *pvParameters)
@@ -492,48 +499,26 @@ void vTask2(void *pvParameters)
 void vTask3(void *pvParameters)
 {
     TickType_t last_change;
-
     last_change = xTaskGetTickCount();
 
     int n = 0;
-    static char str[100] = { 0 };
+    static char str[5] = { 0 };
     static int text_width;
-
-    sprintf(str, "%d", n);
-    text_width = tumGetTextSize((char *)str, &text_width, NULL);
 
     prints("Task 3 init'd\n");
 
     while (1) {
         //if (DrawSignal)
             //if (xSemaphoreTake(DrawSignal, portMAX_DELAY) ==pdTRUE) {
-                /*xSemaphoreTake(ScreenLock, portMAX_DELAY);
-                vDrawStaticItems();
-                sprintf(str, "%d", n);
-                tumGetTextSize((char *)str, &text_width, NULL);
-                checkDraw(tumDrawText(str, SCREEN_WIDTH / 4 - text_width / 2,
-                              SCREEN_HEIGHT / 2 - DEFAULT_FONT_SIZE / 2, Black),
-                  __FUNCTION__);
-                xSemaphoreGive(ScreenLock);
-                n++;
-                vTaskDelay(pdMS_TO_TICKS(1000));
-                xSemaphoreTake(ScreenLock, portMAX_DELAY);
-                checkDraw(tumDrawFilledBox(SCREEN_WIDTH / 4 - text_width / 2,
-                              SCREEN_HEIGHT / 2 - DEFAULT_FONT_SIZE / 2, text_width, DEFAULT_FONT_SIZE, White),
-                  __FUNCTION__);
-                xSemaphoreGive(ScreenLock);*/
-
-                if (xSemaphoreTake(buttons.lock, portMAX_DELAY) == pdTRUE){
-                    if (buttons.buttons[KEYCODE(L)]) {
-                        if (xTaskGetTickCount() - last_change >
-                        STATE_DEBOUNCE_DELAY) {
-                            //buttons.buttons[KEYCODE(L)] = 0;
-                            sprintf(str, "%d", n++);
-                            tumGetTextSize((char *)str, &text_width, NULL);
-                            last_change = xTaskGetTickCount();
-                        }
-                        
+                if (xSemaphoreTake(SyncSignal, portMAX_DELAY) == pdTRUE) {
+                    if (xTaskGetTickCount() - last_change > STATE_DEBOUNCE_DELAY) {
+                        n++;
+                        sprintf(str, "%d", n);
+                        prints("%d\n", n);
+                        tumGetTextSize((char *)str, &text_width, NULL);
+                        last_change = xTaskGetTickCount();
                     }
+
                     xSemaphoreTake(ScreenLock, portMAX_DELAY);
                     checkDraw(tumDrawFilledBox(SCREEN_WIDTH / 4 - text_width / 2,
                               SCREEN_HEIGHT / 2 - DEFAULT_FONT_SIZE / 2, text_width, DEFAULT_FONT_SIZE, White),
@@ -542,8 +527,6 @@ void vTask3(void *pvParameters)
                                 SCREEN_HEIGHT / 2 - DEFAULT_FONT_SIZE / 2, Black),
                             __FUNCTION__);
                     xSemaphoreGive(ScreenLock);
-                    xSemaphoreGive(buttons.lock);
-                    vTaskDelay(pdMS_TO_TICKS(1));
                 }
             //}
     }
@@ -551,19 +534,39 @@ void vTask3(void *pvParameters)
 
 void vTask4(void *pvParameters)
 {
+    TickType_t last_change;
+    last_change = xTaskGetTickCount();
+
     int n = 0;
-    static char str[100] = { 0 };
+    static char str[5] = { 0 };
     static int text_width;
 
     sprintf(str, "%d", n);
-    text_width = tumGetTextSize((char *)str, &text_width, NULL);    
+    text_width = tumGetTextSize((char *)str, &text_width, NULL);
 
     prints("Task 4 init'd\n");
 
     while (1) {
         //if (DrawSignal)
             //if (xSemaphoreTake(DrawSignal, portMAX_DELAY) == pdTRUE) {
+                if (ulTaskNotifyTake(pdFALSE, portMAX_DELAY) == pdTRUE) {
+                    if (xTaskGetTickCount() - last_change > STATE_DEBOUNCE_DELAY) {
+                        n++;
+                        sprintf(str, "%d", n);
+                        prints("%d\n", n);
+                        tumGetTextSize((char *)str, &text_width, NULL);
+                        last_change = xTaskGetTickCount();
+                    }
 
+                    xSemaphoreTake(ScreenLock, portMAX_DELAY);
+                    checkDraw(tumDrawFilledBox(SCREEN_WIDTH *3/4 - text_width / 2,
+                              SCREEN_HEIGHT / 2 - DEFAULT_FONT_SIZE / 2, text_width, DEFAULT_FONT_SIZE, White),
+                            __FUNCTION__);
+                    checkDraw(tumDrawText(str, SCREEN_WIDTH *3/4 - text_width / 2,
+                                SCREEN_HEIGHT / 2 - DEFAULT_FONT_SIZE / 2, Black),
+                            __FUNCTION__);
+                    xSemaphoreGive(ScreenLock);
+                }
             //}
     }
 }
@@ -617,6 +620,12 @@ int main(int argc, char *argv[])
 
     //Load a second font for fun
     tumFontLoadFont(FPS_FONT, DEFAULT_FONT_SIZE);
+
+    SyncSignal = xSemaphoreCreateBinary();
+    if(!SyncSignal) {
+        PRINT_ERROR("Failed to create buttons lock");
+        goto err_sync_signal;
+    }
 
     buttons.lock = xSemaphoreCreateMutex(); // Locking mechanism
     if (!buttons.lock) {
@@ -713,6 +722,8 @@ int main(int argc, char *argv[])
     err_draw_signal:
         vSemaphoreDelete(buttons.lock);
     err_buttons_lock:
+        vSemaphoreDelete(SyncSignal);
+    err_sync_signal:
         tumSoundExit();
     err_init_audio:
         tumEventExit();
