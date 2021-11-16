@@ -315,7 +315,8 @@ void vDrawFPS(void)
     sprintf(str, "FPS: %2d", fps);
 
     if (!tumGetTextSize((char *)str, &text_width, NULL))
-        checkDraw(tumDrawFilledBox(SCREEN_WIDTH - text_width - 10, SCREEN_HEIGHT - DEFAULT_FONT_SIZE * 1.5, text_width, DEFAULT_FONT_SIZE, White), __FUNCTION__);
+        checkDraw(tumDrawFilledBox(SCREEN_WIDTH - text_width - 10, SCREEN_HEIGHT - DEFAULT_FONT_SIZE * 1.5,
+            text_width, DEFAULT_FONT_SIZE, White), __FUNCTION__);
         checkDraw(tumDrawText(str, SCREEN_WIDTH - text_width - 10,
                               SCREEN_HEIGHT - DEFAULT_FONT_SIZE * 1.5,
                               Skyblue),
@@ -640,6 +641,7 @@ int main(int argc, char *argv[])
         PRINT_TASK_ERROR("Task2");
         goto err_task2;
     }
+
 
     if (xTaskCreate(vTask3, "Task3", mainGENERIC_STACK_SIZE * 2,
                     NULL, mainGENERIC_PRIORITY + 3, &Task3) != pdPASS) {

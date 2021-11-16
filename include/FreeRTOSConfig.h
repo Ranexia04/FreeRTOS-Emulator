@@ -90,7 +90,7 @@
 #define configMAX_SYSCALL_INTERRUPT_PRIORITY    1
 
 #define configMAX_PRIORITIES        ( 10 )
-#define configMAX_CO_ROUTINE_PRIORITIES ( 2 )
+#define configMAX_CO_ROUTINE_PRIORITIES ( 4 )
 
 /* Set the following definitions to 1 to include the API function, or zero
  to exclude the API function. */
