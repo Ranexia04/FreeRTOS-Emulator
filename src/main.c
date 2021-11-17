@@ -436,20 +436,21 @@ void vSolutionSwaper(void *pvParameters)
     }
 }
 
-void vReseter(void *pvParameters)
-{
-    while (1) {
-        xTimerStart(xTimers, 0);
-        printf("cona\n");//não há block aqui logo este task fica com os resourses todos
-    }
-}
-
 void vTimerCallback(TimerHandle_t xTimers)
 {
     xSemaphoreTake(solution3.lock, portMAX_DELAY);
     solution3.n3 = 0;
     solution3.n4 = 0;
     xSemaphoreGive(solution3.lock);
+    vTaskResume(Reseter);
+}
+
+void vReseter(void *pvParameters)
+{
+    while (1) {
+        xTimerStart(xTimers, portMAX_DELAY);
+        vTaskSuspend(Reseter);
+    }
 }
 
 void vTask1(void *pvParameters)
@@ -463,7 +464,6 @@ void vTask1(void *pvParameters)
     xLastWakeTime = xTaskGetTickCount();
 
     while (1) {
-        tumFUtilPrintTaskStateList();
         xSemaphoreTake(DrawSignal, portMAX_DELAY);
         xSemaphoreTake(ScreenLock, portMAX_DELAY);
         my_circle->colour = Red;
@@ -605,27 +605,27 @@ void vTask5(void *pvParameters)
 
     while (1) {
         xSemaphoreTake(DrawSignal, portMAX_DELAY);
-        
-            if (xTaskGetTickCount() - last_change > STATE_DEBOUNCE_DELAY) {
-                vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(1000));
-                n5++;
-                
-                sprintf(str, "%d", n5);
-                prints("%d\n", n5);
-                tumGetTextSize((char *)str, &text_width, NULL);
-                last_change = xTaskGetTickCount();
-            }
+        printf("%d              %d\n", xLastWakeTime, xTaskGetTickCount());
+        while(xTaskGetTickCount() - xLastWakeTime > pdMS_TO_TICKS(995)) {
+            xLastWakeTime = xLastWakeTime + 1000;
+        }
 
-            xSemaphoreTake(ScreenLock, portMAX_DELAY);
-            checkDraw(tumDrawFilledBox(SCREEN_WIDTH /2 - text_width / 2,
-                    SCREEN_HEIGHT / 2 - DEFAULT_FONT_SIZE / 2, text_width, DEFAULT_FONT_SIZE, White),
-                    __FUNCTION__);
-            checkDraw(tumDrawText(str, SCREEN_WIDTH / 2 - text_width / 2,
-                    SCREEN_HEIGHT / 2 - DEFAULT_FONT_SIZE / 2, Black),
-                    __FUNCTION__);
-            xSemaphoreGive(ScreenLock);
+        vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(1000));
+
+        n5++;
+        sprintf(str, "%d", n5);
+        //prints("%d\n", n5);
+        tumGetTextSize((char *)str, &text_width, NULL);
+        last_change = xTaskGetTickCount();
         
-            
+        xSemaphoreTake(ScreenLock, portMAX_DELAY);
+        checkDraw(tumDrawFilledBox(SCREEN_WIDTH / 2 - text_width / 2,
+                SCREEN_HEIGHT / 2 - DEFAULT_FONT_SIZE / 2, text_width, DEFAULT_FONT_SIZE, White),
+                __FUNCTION__);
+        checkDraw(tumDrawText(str, SCREEN_WIDTH / 2 - text_width / 2,
+                SCREEN_HEIGHT / 2 - DEFAULT_FONT_SIZE / 2, Black),
+                __FUNCTION__);
+        xSemaphoreGive(ScreenLock);
     }
 }
 
