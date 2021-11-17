@@ -1,7 +1,6 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
 
 #include <SDL2/SDL_scancode.h>
 
@@ -9,6 +8,7 @@
 #include "queue.h"
 #include "semphr.h"
 #include "task.h"
+#include "timers.h"
 
 #include "TUM_Ball.h"
 #include "TUM_Draw.h"
@@ -24,14 +24,15 @@
 #define mainGENERIC_PRIORITY (tskIDLE_PRIORITY)
 #define mainGENERIC_STACK_SIZE ((unsigned short)2560)
 #define STACK_SIZE mainGENERIC_STACK_SIZE * 2
+#define NUM_TIMERS 1
 
 #define STATE_QUEUE_LENGTH 1
 
-#define STATE_COUNT 2
+#define STATE_COUNT 3
 
 #define STATE_ONE 0
 #define STATE_TWO 1
-//#define STATE_THREE 2
+#define STATE_THREE 2
 
 #define NEXT_TASK 0
 #define PREV_TASK 1
@@ -61,14 +62,18 @@ static TaskHandle_t Task1 = NULL;
 static TaskHandle_t Task2 = NULL;
 static TaskHandle_t Task3 = NULL;
 static TaskHandle_t Task4 = NULL;
+static TaskHandle_t Task5 = NULL;
 
 static StaticTask_t Task2Buffer;
 static StackType_t xStack[ STACK_SIZE ];
 
 static QueueHandle_t StateQueue = NULL;
+static QueueHandle_t CurrentStateQueue = NULL;
 static SemaphoreHandle_t DrawSignal = NULL;
 static SemaphoreHandle_t ScreenLock = NULL;
 static SemaphoreHandle_t SyncSignal = NULL;
+
+static TimerHandle_t xTimers;
 
 static image_handle_t logo_image = NULL;
 
@@ -218,6 +223,7 @@ void basicSequentialStateMachine(void *pvParameters)
                 if (xTaskGetTickCount() - last_change >
                     state_change_period) {
                     changeState(&current_state, input);
+                    xQueueOverwrite(CurrentStateQueue, &current_state);
                     state_changed = 1;
                     last_change = xTaskGetTickCount();
                 }
@@ -235,6 +241,9 @@ initial_state:
                     }
                     if (Task4) {
                         vTaskSuspend(Task4);
+                    }
+                    if (Task5) {
+                        vTaskSuspend(Task5);
                     }
                     xSemaphoreTake(DrawSignal, portMAX_DELAY);
                     xSemaphoreTake(ScreenLock, portMAX_DELAY);
@@ -255,6 +264,9 @@ initial_state:
                     if (Task2) {
                         vTaskSuspend(Task2);
                     }
+                    if (Task5) {
+                        vTaskSuspend(Task5);
+                    }
                     xSemaphoreTake(DrawSignal, portMAX_DELAY);
                     xSemaphoreTake(ScreenLock, portMAX_DELAY);
                     checkDraw(tumDrawClear(White), __FUNCTION__);
@@ -270,6 +282,32 @@ initial_state:
                         vTaskResume(Task4);
                     }
                     break;
+                case STATE_THREE:
+                    if (Reseter) {
+                        vTaskSuspend(Reseter);
+                    }
+                    if (Task1) {
+                        vTaskSuspend(Task1);
+                    }
+                    if (Task2) {
+                        vTaskSuspend(Task2);
+                    }
+                    if (Task3) {
+                        vTaskSuspend(Task4);
+                    }
+                    if (Task4) {
+                        vTaskSuspend(Task4);
+                    }
+                    xSemaphoreTake(DrawSignal, portMAX_DELAY);
+                    xSemaphoreTake(ScreenLock, portMAX_DELAY);
+                    checkDraw(tumDrawClear(White), __FUNCTION__);
+                    vDrawStaticItems();
+                    xSemaphoreGive(ScreenLock);
+                    if (Task5) {
+                        vTaskResume(Task5);
+                    }
+                    break;
+
                 default:
                     break;
             }
@@ -356,6 +394,8 @@ void vSwapBuffers(void *pvParameters)
 
 int vCheckButtonInput(int key)
 {
+    unsigned char current_state;
+
     if (xSemaphoreTake(buttons.lock, 0) == pdTRUE) {
         if (buttons.buttons[key]) {
             buttons.buttons[key] = 0;
@@ -364,6 +404,16 @@ int vCheckButtonInput(int key)
                 xSemaphoreGive(SyncSignal);
             if (key == KEYCODE(4))
                 xTaskNotifyGive(Task4);
+            if (key == KEYCODE(5)) {
+                if (xQueuePeek(CurrentStateQueue, &current_state, 0) == pdTRUE) {
+                    if (eTaskGetState(Task5) == eSuspended && current_state == 2) {
+                        vTaskResume(Task5);
+                    } else if ((eTaskGetState(Task5) == eRunning || eTaskGetState(Task5) == eReady || 
+                                eTaskGetState(Task5) == eBlocked) && current_state == 2) {
+                        vTaskSuspend(Task5);
+                    }
+                }
+            }
             return 0;
         }
         xSemaphoreGive(buttons.lock);
@@ -380,6 +430,7 @@ void vSolutionSwaper(void *pvParameters)
         vCheckStateInput();
         vCheckButtonInput(KEYCODE(3));
         vCheckButtonInput(KEYCODE(4));
+        vCheckButtonInput(KEYCODE(5));
         vTaskDelay(pdMS_TO_TICKS(1));
         //vDrawFPS();
     }
@@ -387,16 +438,18 @@ void vSolutionSwaper(void *pvParameters)
 
 void vReseter(void *pvParameters)
 {
-    TickType_t xLastWakeTime;
-    xLastWakeTime = xTaskGetTickCount();
-
     while (1) {
-        vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(15000));
-        xSemaphoreTake(solution3.lock, portMAX_DELAY);
-        solution3.n3 = 0;
-        solution3.n4 = 0;
-        xSemaphoreGive(solution3.lock);
+        xTimerStart(xTimers, 0);
+        printf("cona\n");//não há block aqui logo este task fica com os resourses todos
     }
+}
+
+void vTimerCallback(TimerHandle_t xTimers)
+{
+    xSemaphoreTake(solution3.lock, portMAX_DELAY);
+    solution3.n3 = 0;
+    solution3.n4 = 0;
+    xSemaphoreGive(solution3.lock);
 }
 
 void vTask1(void *pvParameters)
@@ -410,6 +463,7 @@ void vTask1(void *pvParameters)
     xLastWakeTime = xTaskGetTickCount();
 
     while (1) {
+        tumFUtilPrintTaskStateList();
         xSemaphoreTake(DrawSignal, portMAX_DELAY);
         xSemaphoreTake(ScreenLock, portMAX_DELAY);
         my_circle->colour = Red;
@@ -534,6 +588,47 @@ void vTask4(void *pvParameters)
     }
 }
 
+void vTask5(void *pvParameters)
+{
+    TickType_t last_change, xLastWakeTime;
+    last_change = xTaskGetTickCount();
+    xLastWakeTime = xTaskGetTickCount();
+
+    static char str[5] = { 0 };
+    static int text_width;
+
+    static int n5 = 0;
+    sprintf(str, "%d", n5);
+    text_width = tumGetTextSize((char *)str, &text_width, NULL);
+
+    prints("Task 5 init'd\n");
+
+    while (1) {
+        xSemaphoreTake(DrawSignal, portMAX_DELAY);
+        
+            if (xTaskGetTickCount() - last_change > STATE_DEBOUNCE_DELAY) {
+                vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(1000));
+                n5++;
+                
+                sprintf(str, "%d", n5);
+                prints("%d\n", n5);
+                tumGetTextSize((char *)str, &text_width, NULL);
+                last_change = xTaskGetTickCount();
+            }
+
+            xSemaphoreTake(ScreenLock, portMAX_DELAY);
+            checkDraw(tumDrawFilledBox(SCREEN_WIDTH /2 - text_width / 2,
+                    SCREEN_HEIGHT / 2 - DEFAULT_FONT_SIZE / 2, text_width, DEFAULT_FONT_SIZE, White),
+                    __FUNCTION__);
+            checkDraw(tumDrawText(str, SCREEN_WIDTH / 2 - text_width / 2,
+                    SCREEN_HEIGHT / 2 - DEFAULT_FONT_SIZE / 2, Black),
+                    __FUNCTION__);
+            xSemaphoreGive(ScreenLock);
+        
+            
+    }
+}
+
 #define PRINT_TASK_ERROR(task) PRINT_ERROR("Failed to print task ##task");
 
 int main(int argc, char *argv[])
@@ -582,6 +677,7 @@ int main(int argc, char *argv[])
     //Load a second font for fun
     tumFontLoadFont(FPS_FONT, DEFAULT_FONT_SIZE);
 
+    //Semaphores/Mutexes
     SyncSignal = xSemaphoreCreateBinary();
     if(!SyncSignal) {
         PRINT_ERROR("Failed to create buttons lock");
@@ -611,13 +707,29 @@ int main(int argc, char *argv[])
         goto err_screen_lock;
     }
 
-    // Message sending
+    //Queues
     StateQueue = xQueueCreate(STATE_QUEUE_LENGTH, sizeof(unsigned char));
     if (!StateQueue) {
         PRINT_ERROR("Could not open state queue");
         goto err_state_queue;
     }
 
+    CurrentStateQueue = xQueueCreate(STATE_QUEUE_LENGTH, sizeof(unsigned char));
+    if (!CurrentStateQueue) {
+        PRINT_ERROR("Could not open current state queue");
+        goto err_current_state_queue;
+    }
+
+    //Timers
+    
+    xTimers = xTimerCreate("Timer", pdMS_TO_TICKS(15000), pdTRUE, (void *) 0, vTimerCallback);
+    if (xTimers == NULL) {
+        PRINT_ERROR("Could not open software timers");
+        goto err_timer;
+    }
+    
+
+    //Infrastructure Tasks
     if (xTaskCreate(basicSequentialStateMachine, "StateMachine",
                     mainGENERIC_STACK_SIZE * 2, NULL,
                     configMAX_PRIORITIES - 1, StateMachine) != pdPASS) {
@@ -639,26 +751,25 @@ int main(int argc, char *argv[])
     }
 
     if (xTaskCreate(vReseter, "Reseter",
-                    mainGENERIC_STACK_SIZE * 2, NULL, configMAX_PRIORITIES - 4,
+                    mainGENERIC_STACK_SIZE * 2, NULL, mainGENERIC_PRIORITY + 1,
                     Reseter) != pdPASS) {
         PRINT_TASK_ERROR("Reseter");
         goto err_reseter;
     }
 
-    /* Tasks */
+    //Normal Tasks
     if (xTaskCreate(vTask1, "Task1", mainGENERIC_STACK_SIZE * 2,
-                    NULL, mainGENERIC_PRIORITY + 5, &Task1) != pdPASS) {
+                    NULL, mainGENERIC_PRIORITY + 3, &Task1) != pdPASS) {
         PRINT_TASK_ERROR("Task1");
         goto err_task1;
     }
 
     Task2 = xTaskCreateStatic(vTask2, "Task2", STACK_SIZE,
-                    NULL, mainGENERIC_PRIORITY + 4, xStack, &Task2Buffer);
+                    NULL, mainGENERIC_PRIORITY + 2, xStack, &Task2Buffer);
     if (Task2 == NULL) {
         PRINT_TASK_ERROR("Task2");
         goto err_task2;
     }
-
 
     if (xTaskCreate(vTask3, "Task3", mainGENERIC_STACK_SIZE * 2,
                     NULL, mainGENERIC_PRIORITY + 2, &Task3) != pdPASS) {
@@ -672,16 +783,25 @@ int main(int argc, char *argv[])
         goto err_task4;
     }
 
+    if (xTaskCreate(vTask5, "Task5", mainGENERIC_STACK_SIZE * 2,
+                    NULL, mainGENERIC_PRIORITY + 2, &Task5) != pdPASS) {
+        PRINT_TASK_ERROR("Task4");
+        goto err_task5;
+    }
+
     vTaskSuspend(Task1);
     vTaskSuspend(Task2);
     vTaskSuspend(Task3);
     vTaskSuspend(Task4);
+    vTaskSuspend(Task5);
     //vTaskSuspend(Reseter);
 
     vTaskStartScheduler();
 
     return EXIT_SUCCESS;
 
+    err_task5:
+        vTaskDelete(Task4);
     err_task4:
         vTaskDelete(Task3);
     err_task3:
@@ -697,6 +817,10 @@ int main(int argc, char *argv[])
     err_bufferswap:
         vTaskDelete(StateMachine);
     err_statemachine:
+        xTimerDelete(xTimers, 0);
+    err_timer:
+        vQueueDelete(CurrentStateQueue);
+    err_current_state_queue:
         vQueueDelete(StateQueue);
     err_state_queue:
         vSemaphoreDelete(ScreenLock);
