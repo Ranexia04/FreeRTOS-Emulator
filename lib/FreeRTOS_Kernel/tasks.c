@@ -435,6 +435,10 @@ extern void vApplicationTickHook(void);
 
 #if( configSUPPORT_STATIC_ALLOCATION == 1 )
 extern void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer, StackType_t **ppxIdleTaskStackBuffer, uint32_t *pulIdleTaskStackSize);
+#define IDLE_STACK_SIZE ((unsigned short)4)
+static TaskHandle_t IdleStatic = NULL;
+static StaticTask_t pxIdleTaskTCBBuffer;
+static StackType_t pxIdleTaskStackBuffer[IDLE_STACK_SIZE];
 #endif
 
 /* File private functions. --------------------------------*/
@@ -1738,22 +1742,19 @@ void vTaskStartScheduler(void)
     BaseType_t xReturn;
 
     /* Add the idle task at the lowest priority. */
-#if( configSUPPORT_STATIC_ALLOCATION == 0 )
+#if( configSUPPORT_STATIC_ALLOCATION == 1 )
     {
-        StaticTask_t *pxIdleTaskTCBBuffer = NULL;
-        StackType_t *pxIdleTaskStackBuffer = NULL;
-        uint32_t ulIdleTaskStackSize;
 
         /* The Idle task is created using user provided RAM - obtain the
         address of the RAM then create the idle task. */
-        vApplicationGetIdleTaskMemory(&pxIdleTaskTCBBuffer, &pxIdleTaskStackBuffer, &ulIdleTaskStackSize);
+        //vApplicationGetIdleTaskMemory(&pxIdleTaskTCBBuffer, &pxIdleTaskStackBuffer, &ulIdleTaskStackSize);
         xIdleTaskHandle = xTaskCreateStatic(prvIdleTask,
                                             "IDLE",
-                                            ulIdleTaskStackSize,
+                                            IDLE_STACK_SIZE,
                                             (void *) NULL,
                                             (tskIDLE_PRIORITY | portPRIVILEGE_BIT),
                                             pxIdleTaskStackBuffer,
-                                            pxIdleTaskTCBBuffer);  /*lint !e961 MISRA exception, justified as it is not a redundant explicit cast to all supported compilers. */
+                                            &pxIdleTaskTCBBuffer);  /*lint !e961 MISRA exception, justified as it is not a redundant explicit cast to all supported compilers. */
 
         if (xIdleTaskHandle != NULL) {
             xReturn = pdPASS;
