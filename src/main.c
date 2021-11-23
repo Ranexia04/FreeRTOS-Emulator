@@ -87,10 +87,18 @@ static buttons_buffer_t buttons = { 0 };
 typedef struct solution3_buffer {
     int n3;
     int n4;
+    int n5;
     SemaphoreHandle_t lock;
 } solution3_buffer_t;
 
 static solution3_buffer_t solution3 = { 0 };
+
+typedef struct current_state {
+    unsigned char number;
+    SemaphoreHandle_t lock;
+} current_state_t;
+
+static current_state_t current_state = { 0 };
 
 void checkDraw(unsigned char status, const char *msg)
 {
@@ -211,6 +219,9 @@ void basicSequentialStateMachine(void *pvParameters)
 
     TickType_t last_change = xTaskGetTickCount();
 
+    char str[5];
+    int text_width;
+
     while (1) {
         if (state_changed) {
             goto initial_state;
@@ -271,6 +282,16 @@ initial_state:
                     xSemaphoreTake(ScreenLock, portMAX_DELAY);
                     checkDraw(tumDrawClear(White), __FUNCTION__);
                     vDrawStaticItems();
+                    sprintf(str, "%d", solution3.n3);
+                    tumGetTextSize((char *)str, &text_width, NULL);
+                    checkDraw(tumDrawText(str, SCREEN_WIDTH / 4 - text_width / 2,
+                            SCREEN_HEIGHT / 2 - DEFAULT_FONT_SIZE / 2, Black),
+                            __FUNCTION__);
+                    sprintf(str, "%d", solution3.n4);
+                    tumGetTextSize((char *)str, &text_width, NULL);
+                    checkDraw(tumDrawText(str, SCREEN_WIDTH *3/4 - text_width / 2,
+                                SCREEN_HEIGHT / 2 - DEFAULT_FONT_SIZE / 2, Black),
+                                __FUNCTION__);
                     xSemaphoreGive(ScreenLock);
                     if (Reseter) {
                         vTaskResume(Reseter);
@@ -302,6 +323,11 @@ initial_state:
                     xSemaphoreTake(ScreenLock, portMAX_DELAY);
                     checkDraw(tumDrawClear(White), __FUNCTION__);
                     vDrawStaticItems();
+                    sprintf(str, "%d", solution3.n5);
+                    tumGetTextSize((char *)str, &text_width, NULL);
+                    checkDraw(tumDrawText(str, SCREEN_WIDTH / 2 - text_width / 2,
+                            SCREEN_HEIGHT / 2 - DEFAULT_FONT_SIZE / 2, Black),
+                            __FUNCTION__);
                     xSemaphoreGive(ScreenLock);
                     if (Task5) {
                         vTaskResume(Task5);
@@ -471,6 +497,8 @@ void vTask1(void *pvParameters)
         xSemaphoreGive(ScreenLock);
             
         vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(500));
+        if (xTaskGetTickCount() - xLastWakeTime - pdMS_TO_TICKS(500) > 1000)
+            xLastWakeTime = xTaskGetTickCount();
 
         xSemaphoreTake(DrawSignal, portMAX_DELAY);        
         xSemaphoreTake(ScreenLock, portMAX_DELAY);
@@ -479,6 +507,8 @@ void vTask1(void *pvParameters)
         xSemaphoreGive(ScreenLock);
 
         vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(500));
+        if (xTaskGetTickCount() - xLastWakeTime - pdMS_TO_TICKS(500) > 1000)
+            xLastWakeTime = xTaskGetTickCount();
     }
 }
 
@@ -501,6 +531,8 @@ void vTask2(void *pvParameters)
         xSemaphoreGive(ScreenLock);
 
         vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(250));
+        if (xTaskGetTickCount() - xLastWakeTime - pdMS_TO_TICKS(250) > 1000)
+            xLastWakeTime = xTaskGetTickCount();
 
         xSemaphoreTake(DrawSignal, portMAX_DELAY);
         xSemaphoreTake(ScreenLock, portMAX_DELAY);
@@ -509,6 +541,8 @@ void vTask2(void *pvParameters)
         xSemaphoreGive(ScreenLock);
 
         vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(250));
+        if (xTaskGetTickCount() - xLastWakeTime - pdMS_TO_TICKS(250) > 1000)
+            xLastWakeTime = xTaskGetTickCount();
     }
 }
 
@@ -533,7 +567,6 @@ void vTask3(void *pvParameters)
             solution3.n3++;
             xSemaphoreGive(solution3.lock);
             sprintf(str, "%d", solution3.n3);
-            prints("%d\n", solution3.n3);
             tumGetTextSize((char *)str, &text_width, NULL);
             last_change = xTaskGetTickCount();
         }
@@ -570,7 +603,6 @@ void vTask4(void *pvParameters)
                 solution3.n4++;
                 xSemaphoreGive(solution3.lock);
                 sprintf(str, "%d", solution3.n4);
-                prints("%d\n", solution3.n4);
                 tumGetTextSize((char *)str, &text_width, NULL);
                 last_change = xTaskGetTickCount();
             }
@@ -590,34 +622,30 @@ void vTask4(void *pvParameters)
 
 void vTask5(void *pvParameters)
 {
-    TickType_t last_change, xLastWakeTime;
-    last_change = xTaskGetTickCount();
+    TickType_t xLastWakeTime;
     xLastWakeTime = xTaskGetTickCount();
 
     static char str[5] = { 0 };
     static int text_width;
 
-    static int n5 = 0;
-    sprintf(str, "%d", n5);
+    sprintf(str, "%d", solution3.n5);
     text_width = tumGetTextSize((char *)str, &text_width, NULL);
 
     prints("Task 5 init'd\n");
 
     while (1) {
         xSemaphoreTake(DrawSignal, portMAX_DELAY);
-        printf("%d              %d\n", xLastWakeTime, xTaskGetTickCount());
-        while(xTaskGetTickCount() - xLastWakeTime > pdMS_TO_TICKS(995)) {
-            xLastWakeTime = xLastWakeTime + 1000;
-        }
-
-        vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(1000));
-
-        n5++;
-        sprintf(str, "%d", n5);
-        //prints("%d\n", n5);
-        tumGetTextSize((char *)str, &text_width, NULL);
-        last_change = xTaskGetTickCount();
         
+        vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(1000));
+        if (xTaskGetTickCount() - xLastWakeTime - pdMS_TO_TICKS(1000) > 1000)
+            xLastWakeTime = xTaskGetTickCount();
+
+        xSemaphoreTake(solution3.lock, portMAX_DELAY);
+        solution3.n5++;
+        xSemaphoreGive(solution3.lock);
+
+        sprintf(str, "%d", solution3.n5);
+        tumGetTextSize((char *)str, &text_width, NULL);
         xSemaphoreTake(ScreenLock, portMAX_DELAY);
         checkDraw(tumDrawFilledBox(SCREEN_WIDTH / 2 - text_width / 2,
                 SCREEN_HEIGHT / 2 - DEFAULT_FONT_SIZE / 2, text_width, DEFAULT_FONT_SIZE, White),
@@ -694,6 +722,12 @@ int main(int argc, char *argv[])
     if (!solution3.lock) {
         PRINT_ERROR("Failed to create solution3 lock");
         goto err_solution3_lock;
+    }
+
+    current_state.lock = xSemaphoreCreateMutex();
+    if (!current_state.lock) {
+        PRINT_ERROR("Failed to create current state lock");
+        goto err_current_state_lock;
     }
 
     DrawSignal = xSemaphoreCreateBinary(); // Screen buffer locking
@@ -827,6 +861,8 @@ int main(int argc, char *argv[])
     err_screen_lock:
         vSemaphoreDelete(DrawSignal);
     err_draw_signal:
+        vSemaphoreDelete(current_state.lock);
+    err_current_state_lock:
         vSemaphoreDelete(solution3.lock);
     err_solution3_lock:    
         vSemaphoreDelete(buttons.lock);
