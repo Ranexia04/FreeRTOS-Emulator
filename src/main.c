@@ -93,13 +93,6 @@ typedef struct solution3_buffer {
 
 static solution3_buffer_t solution3 = { 0 };
 
-typedef struct current_state {
-    unsigned char number;
-    SemaphoreHandle_t lock;
-} current_state_t;
-
-static current_state_t current_state = { 0 };
-
 void checkDraw(unsigned char status, const char *msg)
 {
     if (status) {
@@ -427,9 +420,17 @@ int vCheckButtonInput(int key)
             buttons.buttons[key] = 0;
             xSemaphoreGive(buttons.lock);
             if (key == KEYCODE(3))
-                xSemaphoreGive(SyncSignal);
+                if (xQueuePeek(CurrentStateQueue, &current_state, 0) == pdTRUE) {
+                    if (current_state == STATE_TWO)
+                        xSemaphoreGive(SyncSignal);
+                }
+                
             if (key == KEYCODE(4))
-                xTaskNotifyGive(Task4);
+                if (xQueuePeek(CurrentStateQueue, &current_state, 0) == pdTRUE) {
+                    if (current_state == STATE_TWO)
+                        xTaskNotifyGive(Task4);
+                }
+
             if (key == KEYCODE(5)) {
                 if (xQueuePeek(CurrentStateQueue, &current_state, 0) == pdTRUE) {
                     if (eTaskGetState(Task5) == eSuspended && current_state == 2) {
@@ -615,8 +616,7 @@ void vTask4(void *pvParameters)
                     SCREEN_HEIGHT / 2 - DEFAULT_FONT_SIZE / 2, Black),
                     __FUNCTION__);
             xSemaphoreGive(ScreenLock);
-        }
-            
+        }   
     }
 }
 
@@ -722,12 +722,6 @@ int main(int argc, char *argv[])
     if (!solution3.lock) {
         PRINT_ERROR("Failed to create solution3 lock");
         goto err_solution3_lock;
-    }
-
-    current_state.lock = xSemaphoreCreateMutex();
-    if (!current_state.lock) {
-        PRINT_ERROR("Failed to create current state lock");
-        goto err_current_state_lock;
     }
 
     DrawSignal = xSemaphoreCreateBinary(); // Screen buffer locking
@@ -861,8 +855,6 @@ int main(int argc, char *argv[])
     err_screen_lock:
         vSemaphoreDelete(DrawSignal);
     err_draw_signal:
-        vSemaphoreDelete(current_state.lock);
-    err_current_state_lock:
         vSemaphoreDelete(solution3.lock);
     err_solution3_lock:    
         vSemaphoreDelete(buttons.lock);
