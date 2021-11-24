@@ -58,13 +58,14 @@ static TaskHandle_t StateMachine = NULL;
 static TaskHandle_t BufferSwap = NULL;
 static TaskHandle_t SolutionSwaper = NULL;
 static TaskHandle_t Reseter = NULL;
-static TaskHandle_t Task1 = NULL;
-static TaskHandle_t Task2 = NULL;
-static TaskHandle_t Task3 = NULL;
-static TaskHandle_t Task4 = NULL;
-static TaskHandle_t Task5 = NULL;
+static TaskHandle_t Task2_1 = NULL;
+static TaskHandle_t Task3_1 = NULL;
+static TaskHandle_t Task3_2 = NULL;
+static TaskHandle_t Task3_3 = NULL;
+static TaskHandle_t Task3_4 = NULL;
+static TaskHandle_t Task3_5 = NULL;
 
-static StaticTask_t Task2Buffer;
+static StaticTask_t Task3_2Buffer;
 static StackType_t xStack[ STACK_SIZE ];
 
 static QueueHandle_t StateQueue = NULL;
@@ -242,36 +243,36 @@ initial_state:
                     if (Reseter) {
                         vTaskSuspend(Reseter);
                     }
-                    if (Task3) {
-                        vTaskSuspend(Task3);
+                    if (Task3_3) {
+                        vTaskSuspend(Task3_3);
                     }
-                    if (Task4) {
-                        vTaskSuspend(Task4);
+                    if (Task3_4) {
+                        vTaskSuspend(Task3_4);
                     }
-                    if (Task5) {
-                        vTaskSuspend(Task5);
+                    if (Task3_5) {
+                        vTaskSuspend(Task3_5);
                     }
                     xSemaphoreTake(DrawSignal, portMAX_DELAY);
                     xSemaphoreTake(ScreenLock, portMAX_DELAY);
                     checkDraw(tumDrawClear(White), __FUNCTION__);
                     vDrawStaticItems();
                     xSemaphoreGive(ScreenLock);
-                    if (Task1) {
-                        vTaskResume(Task1);
+                    if (Task3_1) {
+                        vTaskResume(Task3_1);
                     }
-                    if (Task2) {
-                        vTaskResume(Task2);
+                    if (Task3_2) {
+                        vTaskResume(Task3_2);
                     }
                     break;
                 case STATE_TWO:
-                    if (Task1) {
-                        vTaskSuspend(Task1);
+                    if (Task3_1) {
+                        vTaskSuspend(Task3_1);
                     }
-                    if (Task2) {
-                        vTaskSuspend(Task2);
+                    if (Task3_2) {
+                        vTaskSuspend(Task3_2);
                     }
-                    if (Task5) {
-                        vTaskSuspend(Task5);
+                    if (Task3_5) {
+                        vTaskSuspend(Task3_5);
                     }
                     xSemaphoreTake(DrawSignal, portMAX_DELAY);
                     xSemaphoreTake(ScreenLock, portMAX_DELAY);
@@ -291,28 +292,28 @@ initial_state:
                     if (Reseter) {
                         vTaskResume(Reseter);
                     }
-                    if (Task3) {
-                        vTaskResume(Task3);
+                    if (Task3_3) {
+                        vTaskResume(Task3_3);
                     }
-                    if (Task4) {
-                        vTaskResume(Task4);
+                    if (Task3_4) {
+                        vTaskResume(Task3_4);
                     }
                     break;
                 case STATE_THREE:
                     if (Reseter) {
                         vTaskSuspend(Reseter);
                     }
-                    if (Task1) {
-                        vTaskSuspend(Task1);
+                    if (Task3_1) {
+                        vTaskSuspend(Task3_1);
                     }
-                    if (Task2) {
-                        vTaskSuspend(Task2);
+                    if (Task3_2) {
+                        vTaskSuspend(Task3_2);
                     }
-                    if (Task3) {
-                        vTaskSuspend(Task4);
+                    if (Task3_3) {
+                        vTaskSuspend(Task3_4);
                     }
-                    if (Task4) {
-                        vTaskSuspend(Task4);
+                    if (Task3_4) {
+                        vTaskSuspend(Task3_4);
                     }
                     xSemaphoreTake(DrawSignal, portMAX_DELAY);
                     xSemaphoreTake(ScreenLock, portMAX_DELAY);
@@ -325,8 +326,8 @@ initial_state:
                             __FUNCTION__);
                     xSemaphoreGive(ScreenLock);
                     xQueuePeek(Task5State, &task5_state, portMAX_DELAY);
-                    if (Task5 && task5_state == 1) {
-                        vTaskResume(Task5);
+                    if (Task3_5 && task5_state == 1) {
+                        vTaskResume(Task3_5);
                     }
                     break;
 
@@ -431,20 +432,20 @@ int vCheckButtonInput(int key)
             if (key == KEYCODE(4))
                 if (xQueuePeek(CurrentStateQueue, &current_state, 0) == pdTRUE) {
                     if (current_state == STATE_TWO)
-                        xTaskNotifyGive(Task4);
+                        xTaskNotifyGive(Task3_4);
                 }
 
             if (key == KEYCODE(5)) {
                 if (xQueuePeek(CurrentStateQueue, &current_state, 0) == pdTRUE) {
-                    if (eTaskGetState(Task5) == eSuspended && current_state == 2) {
+                    if (eTaskGetState(Task3_5) == eSuspended && current_state == 2) {
                         task5_state = 1;
                         xQueueOverwrite(Task5State, &task5_state);
-                        vTaskResume(Task5);
-                    } else if ((eTaskGetState(Task5) == eRunning || eTaskGetState(Task5) == eReady || 
-                                eTaskGetState(Task5) == eBlocked) && current_state == 2) {
+                        vTaskResume(Task3_5);
+                    } else if ((eTaskGetState(Task3_5) == eRunning || eTaskGetState(Task3_5) == eReady || 
+                                eTaskGetState(Task3_5) == eBlocked) && current_state == 2) {
                         task5_state = 0;
                         xQueueOverwrite(Task5State, &task5_state);
-                        vTaskSuspend(Task5);
+                        vTaskSuspend(Task3_5);
                     }
                 }
             }
@@ -487,7 +488,7 @@ void vReseter(void *pvParameters)
     }
 }
 
-void vTask1(void *pvParameters)
+void vTask3_1(void *pvParameters)
 {
     TickType_t xLastWakeTime;
     prints("Task 1 init'd\n");
@@ -520,7 +521,7 @@ void vTask1(void *pvParameters)
     }
 }
 
-void vTask2(void *pvParameters)
+void vTask3_2(void *pvParameters)
 {
     TickType_t xLastWakeTime;
     prints("Task 2 init'd\n");
@@ -554,7 +555,9 @@ void vTask2(void *pvParameters)
     }
 }
 
-void vTask3(void *pvParameters)
+
+
+void vTask3_3(void *pvParameters)
 {
     TickType_t last_change;
     last_change = xTaskGetTickCount();
@@ -590,7 +593,7 @@ void vTask3(void *pvParameters)
     }
 }
 
-void vTask4(void *pvParameters)
+void vTask3_4(void *pvParameters)
 {
     TickType_t last_change;
     last_change = xTaskGetTickCount();
@@ -627,7 +630,7 @@ void vTask4(void *pvParameters)
     }
 }
 
-void vTask5(void *pvParameters)
+void vTask3_5(void *pvParameters)
 {
     TickType_t xLastWakeTime;
     xLastWakeTime = xTaskGetTickCount();
@@ -799,57 +802,65 @@ int main(int argc, char *argv[])
     }
 
     //Normal Tasks
-    if (xTaskCreate(vTask1, "Task1", mainGENERIC_STACK_SIZE * 2,
-                    NULL, mainGENERIC_PRIORITY + 3, &Task1) != pdPASS) {
-        PRINT_TASK_ERROR("Task1");
-        goto err_task1;
+    if (xTaskCreate(vTask2_1, "Task2_1", mainGENERIC_STACK_SIZE * 2,
+                    NULL, mainGENERIC_PRIORITY + 3, &Task2_1) != pdPASS) {
+        PRINT_TASK_ERROR("Task2_1");
+        goto err_task2_1;
+    }
+    if (xTaskCreate(vTask3_1, "Task3_1", mainGENERIC_STACK_SIZE * 2,
+                    NULL, mainGENERIC_PRIORITY + 3, &Task3_1) != pdPASS) {
+        PRINT_TASK_ERROR("Task3_1");
+        goto err_task3_1;
     }
 
-    Task2 = xTaskCreateStatic(vTask2, "Task2", STACK_SIZE,
-                    NULL, mainGENERIC_PRIORITY + 2, xStack, &Task2Buffer);
-    if (Task2 == NULL) {
-        PRINT_TASK_ERROR("Task2");
-        goto err_task2;
+    Task3_2 = xTaskCreateStatic(vTask3_2, "Task3_2", STACK_SIZE,
+                    NULL, mainGENERIC_PRIORITY + 2, xStack, &Task3_2Buffer);
+    if (Task3_2 == NULL) {
+        PRINT_TASK_ERROR("Task3_2");
+        goto err_task3_2;
     }
 
-    if (xTaskCreate(vTask3, "Task3", mainGENERIC_STACK_SIZE * 2,
-                    NULL, mainGENERIC_PRIORITY + 2, &Task3) != pdPASS) {
-        PRINT_TASK_ERROR("Task3");
-        goto err_task3;
+    if (xTaskCreate(vTask3_3, "Task3_3", mainGENERIC_STACK_SIZE * 2,
+                    NULL, mainGENERIC_PRIORITY + 2, &Task3_3) != pdPASS) {
+        PRINT_TASK_ERROR("Task3_3");
+        goto err_task3_3;
     }
 
-    if (xTaskCreate(vTask4, "Task4", mainGENERIC_STACK_SIZE * 2,
-                    NULL, mainGENERIC_PRIORITY + 3, &Task4) != pdPASS) {
-        PRINT_TASK_ERROR("Task4");
-        goto err_task4;
+    if (xTaskCreate(vTask3_4, "Task3_4", mainGENERIC_STACK_SIZE * 2,
+                    NULL, mainGENERIC_PRIORITY + 3, &Task3_4) != pdPASS) {
+        PRINT_TASK_ERROR("Task3_4");
+        goto err_task3_4;
     }
 
-    if (xTaskCreate(vTask5, "Task5", mainGENERIC_STACK_SIZE * 2,
-                    NULL, mainGENERIC_PRIORITY + 2, &Task5) != pdPASS) {
-        PRINT_TASK_ERROR("Task4");
-        goto err_task5;
+    if (xTaskCreate(vTask3_5, "Task3_5", mainGENERIC_STACK_SIZE * 2,
+                    NULL, mainGENERIC_PRIORITY + 2, &Task3_5) != pdPASS) {
+        PRINT_TASK_ERROR("Task3_5");
+        goto err_task3_5;
     }
 
-    vTaskSuspend(Task1);
-    vTaskSuspend(Task2);
-    vTaskSuspend(Task3);
-    vTaskSuspend(Task4);
-    vTaskSuspend(Task5);
+    vTaskSuspend(Task2_1);
+    vTaskSuspend(Task3_1);
+    vTaskSuspend(Task3_2);
+    vTaskSuspend(Task3_3);
+    vTaskSuspend(Task3_4);
+    vTaskSuspend(Task3_5);
     vTaskSuspend(Reseter);
 
     vTaskStartScheduler();
 
     return EXIT_SUCCESS;
 
-    err_task5:
-        vTaskDelete(Task4);
-    err_task4:
-        vTaskDelete(Task3);
-    err_task3:
-        vTaskDelete(Task2);
-    err_task2:
-        vTaskDelete(Task1);
-    err_task1:
+    err_task3_5:
+        vTaskDelete(Task3_4);
+    err_task3_4:
+        vTaskDelete(Task3_3);
+    err_task3_3:
+        vTaskDelete(Task3_2);
+    err_task3_2:
+        vTaskDelete(Task3_1);
+    err_task3_1:
+        vTaskDelete(Task2_1);
+    err_task2_1:
         vTaskDelete(Reseter);
     err_reseter:
         vTaskDelete(SolutionSwaper);
