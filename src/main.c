@@ -58,20 +58,20 @@ const unsigned char prev_state_signal = PREV_TASK;
 
 static TaskHandle_t StateMachine = NULL;
 static TaskHandle_t BufferSwap = NULL;
-static TaskHandle_t SolutionSwaper = NULL;
+static TaskHandle_t CircleManager = NULL;
 static TaskHandle_t Reseter = NULL;
-static TaskHandle_t Task2_1 = NULL;
-static TaskHandle_t Task3_1 = NULL;
-static TaskHandle_t Task3_2 = NULL;
+static TaskHandle_t StateOneDrawer = NULL;
+static TaskHandle_t StateTwoDrawer = NULL;
 static TaskHandle_t Task3_3 = NULL;
 static TaskHandle_t Task3_4 = NULL;
 static TaskHandle_t Task3_5 = NULL;
 
-static StaticTask_t Task3_2Buffer;
+static StaticTask_t StateTwoDrawerBuffer;
 static StackType_t xStack[ STACK_SIZE ];
 
 static QueueHandle_t StateQueue = NULL;
 static QueueHandle_t CurrentStateQueue = NULL;
+static QueueHandle_t CircleQueue = NULL;
 static QueueHandle_t task3_5State = NULL;
 static SemaphoreHandle_t DrawSignal = NULL;
 static SemaphoreHandle_t ScreenLock = NULL;
@@ -207,14 +207,11 @@ void vTaskSuspender()
     if (Reseter) {
         vTaskSuspend(Reseter);
     }
-    if (Task2_1) {
-        vTaskSuspend(Task2_1);
+    if (StateOneDrawer) {
+        vTaskSuspend(StateOneDrawer);
     }
-    if (Task3_1) {
-        vTaskSuspend(Task3_1);
-    }
-    if (Task3_2) {
-        vTaskSuspend(Task3_2);
+    if (StateTwoDrawer) {
+        vTaskSuspend(StateTwoDrawer);
     }
     if (Task3_3) {
         vTaskSuspend(Task3_3);
@@ -270,8 +267,8 @@ initial_state:
                     checkDraw(tumDrawClear(White), __FUNCTION__);
                     vDrawStaticItems();
                     xSemaphoreGive(ScreenLock);
-                    if (Task2_1) {
-                        vTaskResume(Task2_1);
+                    if (StateOneDrawer) {
+                        vTaskResume(StateOneDrawer);
                     }
                     break;
                 case STATE_TWO:
@@ -296,25 +293,22 @@ initial_state:
                             __FUNCTION__);
                     xSemaphoreGive(ScreenLock);
                     
-                    if (Reseter) {
+                    /*if (Reseter) {
                         vTaskResume(Reseter);
+                    }*/
+                    if (StateTwoDrawer) {
+                        vTaskResume(StateTwoDrawer);
                     }
-                    if (Task3_1) {
-                        vTaskResume(Task3_1);
-                    }
-                    if (Task3_2) {
-                        vTaskResume(Task3_2);
-                    }
-                    if (Task3_3) {
+                    /*if (Task3_3) {
                         vTaskResume(Task3_3);
                     }
                     if (Task3_4) {
                         vTaskResume(Task3_4);
                     }
-                    xQueuePeek(task3_5State, &task3_5_state, portMAX_DELAY);
+                    /*xQueuePeek(task3_5State, &task3_5_state, portMAX_DELAY);
                     if (Task3_5 && task3_5_state == 1) {
                         vTaskResume(Task3_5);
-                    }
+                    }*/
                     break;
                 case STATE_THREE:
                     
@@ -445,19 +439,12 @@ int vCheckButtonInput(int key)
     return 0;
 }
 
-void vSolutionSwaper(void *pvParameters)
+void vCheckInput(void)
 {
-    while (1) {
-        /*tumEventFetchEvents(FETCH_EVENT_BLOCK |
-                                    FETCH_EVENT_NO_GL_CHECK);*/
-        xGetButtonInput();
-        vCheckStateInput();
-        vCheckButtonInput(KEYCODE(3));
-        vCheckButtonInput(KEYCODE(4));
-        vCheckButtonInput(KEYCODE(5));
-        vTaskDelay(pdMS_TO_TICKS(1));
-        //vDrawFPS();
-    }
+    vCheckStateInput();
+    vCheckButtonInput(KEYCODE(3));
+    vCheckButtonInput(KEYCODE(4));
+    vCheckButtonInput(KEYCODE(5)); 
 }
 
 void vTimerCallback(TimerHandle_t xTimers)
@@ -505,7 +492,7 @@ void vReseter(void *pvParameters)
     }
 }
 
-void vTask2_1(void *pvParameters)
+void vStateOneDrawer(void *pvParameters)
 {
     coord_t *triangle_coords = (coord_t *)calloc(3, sizeof(coord_t));
     triangle_coords[0].x = SCREEN_WIDTH/2 - RADIUS;
@@ -536,6 +523,8 @@ void vTask2_1(void *pvParameters)
 
     static int offset_x = 0, offset_y = 0;
 
+    prints("StateOne Init'd\n");
+
     while (1) {
         if (DrawSignal)
             if (xSemaphoreTake(DrawSignal, portMAX_DELAY) ==
@@ -549,8 +538,6 @@ void vTask2_1(void *pvParameters)
                 // Clear screen
                 checkDraw(tumDrawClear(White), __FUNCTION__);
                 vDrawStaticItems();
-                //vDrawCave(tumEventGetMouseLeft());
-                //vDrawButtonText();
                 
                 my_circle->x = SCREEN_WIDTH / 2 + SCREEN_WIDTH / 4 * (-1*cos(2*PI*FREQ*time)) + offset_x;
                 my_circle->y = SCREEN_HEIGHT / 2 + SCREEN_HEIGHT / 4 * (-1*sin(2*PI*FREQ*time)) + offset_y;
@@ -652,78 +639,98 @@ void vTask2_1(void *pvParameters)
                 vDrawFPS();
 
                 xSemaphoreGive(ScreenLock);
+
+                vCheckInput();
             }
     }
 }
 
-void vTask3_1(void *pvParameters)
+void vCircleManager(void *pvParameters)
 {
-    TickType_t xLastWakeTime;
-    prints("Task 1 init'd\n");
+    static int* write_circle = NULL;
+    write_circle = (int*)calloc(2, sizeof(int));
+    static unsigned char write_flags[2] = {0};
 
+    TickType_t xLastWakeTime;
+    xLastWakeTime = xTaskGetTickCount();
+
+    while (1) {
+        xQueueOverwrite(CircleQueue, &write_circle);
+
+        write_flags[0]++;
+        if (write_flags[0] == 2) {
+            prints("%c", write_circle[0]);
+            write_circle[0] = !write_circle[0];
+            prints("%c", write_circle[0]);
+            write_flags[0] = 0;
+        }
+
+        write_flags[1]++;
+        if (write_flags[1] == 1) {
+            write_circle[1] = !write_circle[1];
+            write_flags[1] = 0;
+        }
+
+        vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(250));
+        if (xTaskGetTickCount() - xLastWakeTime - pdMS_TO_TICKS(250) > 1000)
+            xLastWakeTime = xTaskGetTickCount();
+    }
+}
+
+void vStateTwoDrawer(void *pvParameters)
+{
     ball_t *my_circle = createBall(SCREEN_WIDTH / 4, SCREEN_HEIGHT / 2, Red,
                                  RADIUS, 1000, NULL, NULL);
-
-    xLastWakeTime = xTaskGetTickCount();
-
-    while (1) {
-        xSemaphoreTake(DrawSignal, portMAX_DELAY);
-        xSemaphoreTake(ScreenLock, portMAX_DELAY);
-        my_circle->colour = Red;
-        checkDraw(tumDrawCircle(my_circle->x, my_circle->y, my_circle->radius, my_circle->colour), __FUNCTION__);
-        xSemaphoreGive(ScreenLock);
-            
-        vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(500));
-        if (xTaskGetTickCount() - xLastWakeTime - pdMS_TO_TICKS(500) > 1000)
-            xLastWakeTime = xTaskGetTickCount();
-
-        xSemaphoreTake(DrawSignal, portMAX_DELAY);        
-        xSemaphoreTake(ScreenLock, portMAX_DELAY);
-        my_circle->colour = White;
-        checkDraw(tumDrawCircle(my_circle->x, my_circle->y, my_circle->radius, my_circle->colour), __FUNCTION__);
-        xSemaphoreGive(ScreenLock);
-
-        vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(500));
-        if (xTaskGetTickCount() - xLastWakeTime - pdMS_TO_TICKS(500) > 1000)
-            xLastWakeTime = xTaskGetTickCount();
-    }
-}
-
-void vTask3_2(void *pvParameters)
-{
-    TickType_t xLastWakeTime;
-    prints("Task 2 init'd\n");
-
-    ball_t *my_circle = createBall(SCREEN_WIDTH * 3/4, SCREEN_HEIGHT / 2, Green,
+    ball_t *my_circle2 = createBall(SCREEN_WIDTH * 3 / 4, SCREEN_HEIGHT / 2, Green,
                                  RADIUS, 1000, NULL, NULL);
 
-    xLastWakeTime = xTaskGetTickCount();
+    int* write_circle = NULL;
+    write_circle = (int*)calloc(2, sizeof(int));
+
+    prints("StateTwo init'd\n");
+
 
     while (1) {
-
         xSemaphoreTake(DrawSignal, portMAX_DELAY);
+        tumEventFetchEvents(FETCH_EVENT_BLOCK |
+                                    FETCH_EVENT_NO_GL_CHECK);
+        xGetButtonInput(); // Update global input
+
+        if (xQueuePeek(CircleQueue, &write_circle, 0) == pdTRUE) {
+            switch (write_circle[0]) {
+                case 0:
+                    my_circle->colour = Red;
+                    break;
+                case 1:
+                    my_circle->colour = White;
+                    break;
+                default:
+                    break;
+            }
+
+            switch (write_circle[1]) {
+                case 0:
+                    my_circle2->colour = Green;
+                    break;
+                case 1:
+                    my_circle2->colour = White;
+                    break;
+                default:
+                    break;
+            }
+        }
+
         xSemaphoreTake(ScreenLock, portMAX_DELAY);
-        my_circle->colour = Green;
-        checkDraw(tumDrawCircle(my_circle->x, my_circle->y, my_circle->radius, my_circle->colour), __FUNCTION__);
+        checkDraw(tumDrawClear(White), __FUNCTION__);
+        vDrawStaticItems();
+        tumDrawCircle(my_circle->x, my_circle->y, my_circle->radius, my_circle->colour);
+        tumDrawCircle(my_circle2->x, my_circle2->y, my_circle2->radius, my_circle2->colour);
+        vDrawFPS();
         xSemaphoreGive(ScreenLock);
 
-        vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(250));
-        if (xTaskGetTickCount() - xLastWakeTime - pdMS_TO_TICKS(250) > 1000)
-            xLastWakeTime = xTaskGetTickCount();
-
-        xSemaphoreTake(DrawSignal, portMAX_DELAY);
-        xSemaphoreTake(ScreenLock, portMAX_DELAY);
-        my_circle->colour = White;
-        checkDraw(tumDrawCircle(my_circle->x, my_circle->y, my_circle->radius, my_circle->colour), __FUNCTION__);
-        xSemaphoreGive(ScreenLock);
-
-        vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(250));
-        if (xTaskGetTickCount() - xLastWakeTime - pdMS_TO_TICKS(250) > 1000)
-            xLastWakeTime = xTaskGetTickCount();
+        vCheckInput();
     }
 }
-
-
 
 void vTask3_3(void *pvParameters)
 {
@@ -926,6 +933,12 @@ int main(int argc, char *argv[])
         goto err_current_state_queue;
     }
 
+    CircleQueue = xQueueCreate(STATE_QUEUE_LENGTH, sizeof(int*));
+    if (!CircleQueue) {
+        PRINT_ERROR("Could not open circle queue");
+        goto err_circle_queue;
+    }
+
     task3_5State = xQueueCreate(STATE_QUEUE_LENGTH, sizeof(unsigned char));
     if (!task3_5State) {
         PRINT_ERROR("Could not open task3_5 state queue");
@@ -955,11 +968,11 @@ int main(int argc, char *argv[])
         goto err_bufferswap;
     }
 
-    if (xTaskCreate(vSolutionSwaper, "SolutionSwaper",
-                    mainGENERIC_STACK_SIZE * 2, NULL, configMAX_PRIORITIES - 3,
-                    &SolutionSwaper) != pdPASS) {
-        PRINT_TASK_ERROR("SolutionSwaper");
-        goto err_solutionswaper;
+    if (xTaskCreate(vCircleManager, "CircleManager",
+                    mainGENERIC_STACK_SIZE * 2, NULL, mainGENERIC_PRIORITY + 6,
+                    &CircleManager) != pdPASS) {
+        PRINT_TASK_ERROR("CircleManager");
+        goto err_circle_manager;
     }
 
     if (xTaskCreate(vReseter, "Reseter",
@@ -970,22 +983,15 @@ int main(int argc, char *argv[])
     }
 
     //Normal Tasks
-    if (xTaskCreate(vTask2_1, "Task2_1", mainGENERIC_STACK_SIZE * 2,
-                    NULL, mainGENERIC_PRIORITY + 3, &Task2_1) != pdPASS) {
-        PRINT_TASK_ERROR("Task2_1");
-        goto err_task2_1;
+    if (xTaskCreate(vStateOneDrawer, "StateOneDrawer", mainGENERIC_STACK_SIZE * 2,
+                    NULL, mainGENERIC_PRIORITY + 3, &StateOneDrawer) != pdPASS) {
+        PRINT_TASK_ERROR("StateOneDrawer");
+        goto err_StateOneDrawer;
     }
-    if (xTaskCreate(vTask3_1, "Task3_1", mainGENERIC_STACK_SIZE * 2,
-                    NULL, mainGENERIC_PRIORITY + 3, &Task3_1) != pdPASS) {
-        PRINT_TASK_ERROR("Task3_1");
-        goto err_task3_1;
-    }
-
-    Task3_2 = xTaskCreateStatic(vTask3_2, "Task3_2", STACK_SIZE,
-                    NULL, mainGENERIC_PRIORITY + 2, xStack, &Task3_2Buffer);
-    if (Task3_2 == NULL) {
-        PRINT_TASK_ERROR("Task3_2");
-        goto err_task3_2;
+    if (xTaskCreate(vStateTwoDrawer, "StateTwoDrawer", mainGENERIC_STACK_SIZE * 2,
+                    NULL, mainGENERIC_PRIORITY + 3, &StateTwoDrawer) != pdPASS) {
+        PRINT_TASK_ERROR("StateTwoDrawer");
+        goto err_StateTwoDrawer;
     }
 
     if (xTaskCreate(vTask3_3, "Task3_3", mainGENERIC_STACK_SIZE * 2,
@@ -1006,13 +1012,7 @@ int main(int argc, char *argv[])
         goto err_task3_5;
     }
 
-    vTaskSuspend(Task2_1);
-    vTaskSuspend(Task3_1);
-    vTaskSuspend(Task3_2);
-    vTaskSuspend(Task3_3);
-    vTaskSuspend(Task3_4);
-    vTaskSuspend(Task3_5);
-    vTaskSuspend(Reseter);
+    vTaskSuspender();
 
     vTaskStartScheduler();
 
@@ -1023,16 +1023,14 @@ int main(int argc, char *argv[])
     err_task3_4:
         vTaskDelete(Task3_3);
     err_task3_3:
-        vTaskDelete(Task3_2);
-    err_task3_2:
-        vTaskDelete(Task3_1);
-    err_task3_1:
-        vTaskDelete(Task2_1);
-    err_task2_1:
+        vTaskDelete(StateTwoDrawer);
+    err_StateTwoDrawer:
+        vTaskDelete(StateOneDrawer);
+    err_StateOneDrawer:
         vTaskDelete(Reseter);
     err_reseter:
-        vTaskDelete(SolutionSwaper);
-    err_solutionswaper:
+        vTaskDelete(CircleManager);
+    err_circle_manager:
         vTaskDelete(BufferSwap);
     err_bufferswap:
         vTaskDelete(StateMachine);
@@ -1041,6 +1039,8 @@ int main(int argc, char *argv[])
     err_timer:
         vQueueDelete(task3_5State);
     err_task3_5_state:
+        vQueueDelete(CircleManager);
+    err_circle_queue:
         vQueueDelete(CurrentStateQueue);
     err_current_state_queue:
         vQueueDelete(StateQueue);
