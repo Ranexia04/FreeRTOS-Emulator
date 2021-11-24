@@ -28,7 +28,7 @@
 
 #define STATE_QUEUE_LENGTH 1
 
-#define STATE_COUNT 3
+#define STATE_COUNT 2
 
 #define STATE_ONE 0
 #define STATE_TWO 1
@@ -44,7 +44,7 @@
 #define KEYCODE(CHAR) SDL_SCANCODE_##CHAR
 #define PI 3.142857
 #define FREQ 1
-#define RADIUS 50
+#define RADIUS 40
 #define LOGO_FILENAME "freertos.jpg"
 #define FPS_AVERAGE_COUNT 50
 #define FPS_FONT "IBMPlexSans-Bold.ttf"
@@ -72,7 +72,7 @@ static StackType_t xStack[ STACK_SIZE ];
 
 static QueueHandle_t StateQueue = NULL;
 static QueueHandle_t CurrentStateQueue = NULL;
-static QueueHandle_t Task5State = NULL;
+static QueueHandle_t task3_5State = NULL;
 static SemaphoreHandle_t DrawSignal = NULL;
 static SemaphoreHandle_t ScreenLock = NULL;
 static SemaphoreHandle_t SyncSignal = NULL;
@@ -232,8 +232,8 @@ void basicSequentialStateMachine(void *pvParameters)
     unsigned char current_state = STARTING_STATE; // Default state
     unsigned char state_changed =
         1; // Only re-evaluate state if it has changed
-    unsigned char input = 0, task5_state = 1;
-    xQueueOverwrite(Task5State, &task5_state);
+    unsigned char input = 0, task3_5_state = 1;
+    xQueueOverwrite(task3_5State, &task3_5_state);
 
     const int state_change_period = STATE_DEBOUNCE_DELAY;
 
@@ -270,11 +270,8 @@ initial_state:
                     checkDraw(tumDrawClear(White), __FUNCTION__);
                     vDrawStaticItems();
                     xSemaphoreGive(ScreenLock);
-                    if (Task3_1) {
-                        vTaskResume(Task3_1);
-                    }
-                    if (Task3_2) {
-                        vTaskResume(Task3_2);
+                    if (Task2_1) {
+                        vTaskResume(Task2_1);
                     }
                     break;
                 case STATE_TWO:
@@ -284,17 +281,29 @@ initial_state:
                     vDrawStaticItems();
                     sprintf(str, "%d", solution3.n3);
                     tumGetTextSize((char *)str, &text_width, NULL);
-                    checkDraw(tumDrawText(str, SCREEN_WIDTH / 4 - text_width / 2,
-                            SCREEN_HEIGHT / 2 - DEFAULT_FONT_SIZE / 2, Black),
+                    checkDraw(tumDrawText(str, SCREEN_WIDTH / 2 - text_width / 2,
+                            SCREEN_HEIGHT / 4 - DEFAULT_FONT_SIZE / 2, Black),
                             __FUNCTION__);
                     sprintf(str, "%d", solution3.n4);
                     tumGetTextSize((char *)str, &text_width, NULL);
-                    checkDraw(tumDrawText(str, SCREEN_WIDTH *3/4 - text_width / 2,
-                                SCREEN_HEIGHT / 2 - DEFAULT_FONT_SIZE / 2, Black),
+                    checkDraw(tumDrawText(str, SCREEN_WIDTH / 2 - text_width / 2,
+                                SCREEN_HEIGHT * 3 / 4 - DEFAULT_FONT_SIZE / 2, Black),
                                 __FUNCTION__);
+                    sprintf(str, "%d", solution3.n5);
+                    tumGetTextSize((char *)str, &text_width, NULL);
+                    checkDraw(tumDrawText(str, SCREEN_WIDTH / 2 - text_width / 2,
+                            SCREEN_HEIGHT / 2 - DEFAULT_FONT_SIZE / 2, Black),
+                            __FUNCTION__);
                     xSemaphoreGive(ScreenLock);
+                    
                     if (Reseter) {
                         vTaskResume(Reseter);
+                    }
+                    if (Task3_1) {
+                        vTaskResume(Task3_1);
+                    }
+                    if (Task3_2) {
+                        vTaskResume(Task3_2);
                     }
                     if (Task3_3) {
                         vTaskResume(Task3_3);
@@ -302,22 +311,13 @@ initial_state:
                     if (Task3_4) {
                         vTaskResume(Task3_4);
                     }
-                    break;
-                case STATE_THREE:
-                    xSemaphoreTake(DrawSignal, portMAX_DELAY);
-                    xSemaphoreTake(ScreenLock, portMAX_DELAY);
-                    checkDraw(tumDrawClear(White), __FUNCTION__);
-                    vDrawStaticItems();
-                    sprintf(str, "%d", solution3.n5);
-                    tumGetTextSize((char *)str, &text_width, NULL);
-                    checkDraw(tumDrawText(str, SCREEN_WIDTH / 2 - text_width / 2,
-                            SCREEN_HEIGHT / 2 - DEFAULT_FONT_SIZE / 2, Black),
-                            __FUNCTION__);
-                    xSemaphoreGive(ScreenLock);
-                    xQueuePeek(Task5State, &task5_state, portMAX_DELAY);
-                    if (Task3_5 && task5_state == 1) {
+                    xQueuePeek(task3_5State, &task3_5_state, portMAX_DELAY);
+                    if (Task3_5 && task3_5_state == 1) {
                         vTaskResume(Task3_5);
                     }
+                    break;
+                case STATE_THREE:
+                    
                     break;
 
                 default:
@@ -406,7 +406,7 @@ void vSwapBuffers(void *pvParameters)
 
 int vCheckButtonInput(int key)
 {
-    unsigned char current_state, task5_state;
+    unsigned char current_state, task3_5_state;
 
     if (xSemaphoreTake(buttons.lock, 0) == pdTRUE) {
         if (buttons.buttons[key]) {
@@ -426,14 +426,14 @@ int vCheckButtonInput(int key)
 
             if (key == KEYCODE(5)) {
                 if (xQueuePeek(CurrentStateQueue, &current_state, 0) == pdTRUE) {
-                    if (eTaskGetState(Task3_5) == eSuspended && current_state == 2) {
-                        task5_state = 1;
-                        xQueueOverwrite(Task5State, &task5_state);
+                    if (eTaskGetState(Task3_5) == eSuspended && current_state == STATE_TWO) {
+                        task3_5_state = 1;
+                        xQueueOverwrite(task3_5State, &task3_5_state);
                         vTaskResume(Task3_5);
                     } else if ((eTaskGetState(Task3_5) == eRunning || eTaskGetState(Task3_5) == eReady || 
-                                eTaskGetState(Task3_5) == eBlocked) && current_state == 2) {
-                        task5_state = 0;
-                        xQueueOverwrite(Task5State, &task5_state);
+                                eTaskGetState(Task3_5) == eBlocked) && current_state == STATE_TWO) {
+                        task3_5_state = 0;
+                        xQueueOverwrite(task3_5State, &task3_5_state);
                         vTaskSuspend(Task3_5);
                     }
                 }
@@ -462,10 +462,38 @@ void vSolutionSwaper(void *pvParameters)
 
 void vTimerCallback(TimerHandle_t xTimers)
 {
+    char str[5];
+    int text_width;
+
     xSemaphoreTake(solution3.lock, portMAX_DELAY);
     solution3.n3 = 0;
     solution3.n4 = 0;
     xSemaphoreGive(solution3.lock);
+    xSemaphoreTake(DrawSignal, portMAX_DELAY);
+    xSemaphoreTake(ScreenLock, portMAX_DELAY);
+    
+    sprintf(str, "%d", solution3.n3);
+    tumGetTextSize((char *)str, &text_width, NULL);
+    checkDraw(tumDrawFilledBox(SCREEN_WIDTH / 2 - text_width / 2,
+                SCREEN_HEIGHT / 4 - DEFAULT_FONT_SIZE / 2, text_width, DEFAULT_FONT_SIZE, White),
+                __FUNCTION__);
+    checkDraw(tumDrawText(str, SCREEN_WIDTH / 2 - text_width / 2,
+                            SCREEN_HEIGHT / 4 - DEFAULT_FONT_SIZE / 2, Black),
+                            __FUNCTION__);
+    sprintf(str, "%d", solution3.n4);
+    tumGetTextSize((char *)str, &text_width, NULL);
+    checkDraw(tumDrawFilledBox(SCREEN_WIDTH / 2 - text_width / 2,
+                    SCREEN_HEIGHT * 3 / 4  - DEFAULT_FONT_SIZE / 2, text_width, DEFAULT_FONT_SIZE, White),
+                    __FUNCTION__);
+    checkDraw(tumDrawText(str, SCREEN_WIDTH / 2 - text_width / 2,
+                                SCREEN_HEIGHT * 3 / 4 - DEFAULT_FONT_SIZE / 2, Black),
+                                __FUNCTION__);
+    sprintf(str, "%d", solution3.n5);
+    tumGetTextSize((char *)str, &text_width, NULL);
+    checkDraw(tumDrawText(str, SCREEN_WIDTH / 2 - text_width / 2,
+                            SCREEN_HEIGHT / 2 - DEFAULT_FONT_SIZE / 2, Black),
+                            __FUNCTION__);
+    xSemaphoreGive(ScreenLock);
     vTaskResume(Reseter);
 }
 
@@ -723,11 +751,11 @@ void vTask3_3(void *pvParameters)
         }
 
         xSemaphoreTake(ScreenLock, portMAX_DELAY);
-        checkDraw(tumDrawFilledBox(SCREEN_WIDTH / 4 - text_width / 2,
-                SCREEN_HEIGHT / 2 - DEFAULT_FONT_SIZE / 2, text_width, DEFAULT_FONT_SIZE, White),
+        checkDraw(tumDrawFilledBox(SCREEN_WIDTH / 2 - text_width / 2,
+                SCREEN_HEIGHT / 4 - DEFAULT_FONT_SIZE / 2, text_width, DEFAULT_FONT_SIZE, White),
                 __FUNCTION__);
-        checkDraw(tumDrawText(str, SCREEN_WIDTH / 4 - text_width / 2,
-                SCREEN_HEIGHT / 2 - DEFAULT_FONT_SIZE / 2, Black),
+        checkDraw(tumDrawText(str, SCREEN_WIDTH / 2 - text_width / 2,
+                SCREEN_HEIGHT / 4 - DEFAULT_FONT_SIZE / 2, Black),
                 __FUNCTION__);
         xSemaphoreGive(ScreenLock);
     }
@@ -759,11 +787,11 @@ void vTask3_4(void *pvParameters)
             }
 
             xSemaphoreTake(ScreenLock, portMAX_DELAY);
-            checkDraw(tumDrawFilledBox(SCREEN_WIDTH *3/4 - text_width / 2,
-                    SCREEN_HEIGHT / 2 - DEFAULT_FONT_SIZE / 2, text_width, DEFAULT_FONT_SIZE, White),
+            checkDraw(tumDrawFilledBox(SCREEN_WIDTH / 2 - text_width / 2,
+                    SCREEN_HEIGHT * 3 / 4  - DEFAULT_FONT_SIZE / 2, text_width, DEFAULT_FONT_SIZE, White),
                     __FUNCTION__);
-            checkDraw(tumDrawText(str, SCREEN_WIDTH *3/4 - text_width / 2,
-                    SCREEN_HEIGHT / 2 - DEFAULT_FONT_SIZE / 2, Black),
+            checkDraw(tumDrawText(str, SCREEN_WIDTH / 2 - text_width / 2,
+                    SCREEN_HEIGHT * 3 / 4 - DEFAULT_FONT_SIZE / 2, Black),
                     __FUNCTION__);
             xSemaphoreGive(ScreenLock);
         }   
@@ -898,10 +926,10 @@ int main(int argc, char *argv[])
         goto err_current_state_queue;
     }
 
-    Task5State = xQueueCreate(STATE_QUEUE_LENGTH, sizeof(unsigned char));
-    if (!Task5State) {
-        PRINT_ERROR("Could not open task5 state queue");
-        goto err_task5_state;
+    task3_5State = xQueueCreate(STATE_QUEUE_LENGTH, sizeof(unsigned char));
+    if (!task3_5State) {
+        PRINT_ERROR("Could not open task3_5 state queue");
+        goto err_task3_5_state;
     }
 
     //Timers
@@ -1011,8 +1039,8 @@ int main(int argc, char *argv[])
     err_statemachine:
         xTimerDelete(xTimers, 0);
     err_timer:
-        vQueueDelete(Task5State);
-    err_task5_state:
+        vQueueDelete(task3_5State);
+    err_task3_5_state:
         vQueueDelete(CurrentStateQueue);
     err_current_state_queue:
         vQueueDelete(StateQueue);
