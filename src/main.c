@@ -42,6 +42,8 @@
 #define STATE_DEBOUNCE_DELAY 300
 
 #define KEYCODE(CHAR) SDL_SCANCODE_##CHAR
+#define PI 3.142857
+#define FREQ 1
 #define RADIUS 50
 #define LOGO_FILENAME "freertos.jpg"
 #define FPS_AVERAGE_COUNT 50
@@ -200,9 +202,31 @@ void vDrawStaticItems(void)
     vDrawLogo();
 }
 
-/*
- * Example basic state machine with sequential states
- */
+void vTaskSuspender()
+{
+    if (Reseter) {
+        vTaskSuspend(Reseter);
+    }
+    if (Task2_1) {
+        vTaskSuspend(Task2_1);
+    }
+    if (Task3_1) {
+        vTaskSuspend(Task3_1);
+    }
+    if (Task3_2) {
+        vTaskSuspend(Task3_2);
+    }
+    if (Task3_3) {
+        vTaskSuspend(Task3_3);
+    }
+    if (Task3_4) {
+        vTaskSuspend(Task3_4);
+    }
+    if (Task3_5) {
+        vTaskSuspend(Task3_5);
+    }
+}
+
 void basicSequentialStateMachine(void *pvParameters)
 {
     unsigned char current_state = STARTING_STATE; // Default state
@@ -238,20 +262,9 @@ void basicSequentialStateMachine(void *pvParameters)
 initial_state:
         // Handle current state
         if (state_changed) {
+            vTaskSuspender();
             switch (current_state) {
                 case STATE_ONE:
-                    if (Reseter) {
-                        vTaskSuspend(Reseter);
-                    }
-                    if (Task3_3) {
-                        vTaskSuspend(Task3_3);
-                    }
-                    if (Task3_4) {
-                        vTaskSuspend(Task3_4);
-                    }
-                    if (Task3_5) {
-                        vTaskSuspend(Task3_5);
-                    }
                     xSemaphoreTake(DrawSignal, portMAX_DELAY);
                     xSemaphoreTake(ScreenLock, portMAX_DELAY);
                     checkDraw(tumDrawClear(White), __FUNCTION__);
@@ -265,15 +278,6 @@ initial_state:
                     }
                     break;
                 case STATE_TWO:
-                    if (Task3_1) {
-                        vTaskSuspend(Task3_1);
-                    }
-                    if (Task3_2) {
-                        vTaskSuspend(Task3_2);
-                    }
-                    if (Task3_5) {
-                        vTaskSuspend(Task3_5);
-                    }
                     xSemaphoreTake(DrawSignal, portMAX_DELAY);
                     xSemaphoreTake(ScreenLock, portMAX_DELAY);
                     checkDraw(tumDrawClear(White), __FUNCTION__);
@@ -300,21 +304,6 @@ initial_state:
                     }
                     break;
                 case STATE_THREE:
-                    if (Reseter) {
-                        vTaskSuspend(Reseter);
-                    }
-                    if (Task3_1) {
-                        vTaskSuspend(Task3_1);
-                    }
-                    if (Task3_2) {
-                        vTaskSuspend(Task3_2);
-                    }
-                    if (Task3_3) {
-                        vTaskSuspend(Task3_4);
-                    }
-                    if (Task3_4) {
-                        vTaskSuspend(Task3_4);
-                    }
                     xSemaphoreTake(DrawSignal, portMAX_DELAY);
                     xSemaphoreTake(ScreenLock, portMAX_DELAY);
                     checkDraw(tumDrawClear(White), __FUNCTION__);
@@ -485,6 +474,157 @@ void vReseter(void *pvParameters)
     while (1) {
         xTimerStart(xTimers, portMAX_DELAY);
         vTaskSuspend(Reseter);
+    }
+}
+
+void vTask2_1(void *pvParameters)
+{
+    coord_t *triangle_coords = (coord_t *)calloc(3, sizeof(coord_t));
+    triangle_coords[0].x = SCREEN_WIDTH/2 - RADIUS;
+    triangle_coords[0].y = SCREEN_HEIGHT/2 + RADIUS;
+    triangle_coords[1].x = SCREEN_WIDTH/2;
+    triangle_coords[1].y = SCREEN_HEIGHT/2 - RADIUS;
+    triangle_coords[2].x = SCREEN_WIDTH/2 + RADIUS;
+    triangle_coords[2].y = SCREEN_HEIGHT/2 + RADIUS;
+    static int my_square_x = 0;
+    static int my_square_y = 0;
+
+    ball_t *my_circle = createBall(SCREEN_WIDTH / 4, SCREEN_HEIGHT / 2, Red,
+                                 RADIUS, 1000, NULL, NULL);
+
+    static char str[100];
+    static int str_width = 0;
+    static int number_buttons[4] = {0};
+    static int flag_buttons[4] = {0};
+    static int text_position_beg = 0;
+    static int text_position_end = 0;
+    static int offset = 0;
+    static int change = 10;
+    static double time = 0;
+    static int lastMouseX, lastMouseY;
+
+    lastMouseX = tumEventGetMouseX();
+    lastMouseY = tumEventGetMouseY();
+
+    static int offset_x = 0, offset_y = 0;
+
+    while (1) {
+        if (DrawSignal)
+            if (xSemaphoreTake(DrawSignal, portMAX_DELAY) ==
+                pdTRUE) {
+                tumEventFetchEvents(FETCH_EVENT_BLOCK |
+                                    FETCH_EVENT_NO_GL_CHECK);
+                xGetButtonInput(); // Update global input
+
+                xSemaphoreTake(ScreenLock, portMAX_DELAY);
+
+                // Clear screen
+                checkDraw(tumDrawClear(White), __FUNCTION__);
+                vDrawStaticItems();
+                //vDrawCave(tumEventGetMouseLeft());
+                //vDrawButtonText();
+                
+                my_circle->x = SCREEN_WIDTH / 2 + SCREEN_WIDTH / 4 * (-1*cos(2*PI*FREQ*time)) + offset_x;
+                my_circle->y = SCREEN_HEIGHT / 2 + SCREEN_HEIGHT / 4 * (-1*sin(2*PI*FREQ*time)) + offset_y;
+                checkDraw(tumDrawCircle(my_circle->x, my_circle->y, my_circle->radius, my_circle->colour), __FUNCTION__);
+
+                my_square_x = SCREEN_WIDTH / 2 - RADIUS + SCREEN_WIDTH / 4 * cos(2*PI*FREQ*time) + offset_x;
+                my_square_y = SCREEN_HEIGHT / 2 - RADIUS + SCREEN_HEIGHT / 4 * sin(2*PI*FREQ*time) + offset_y;
+                checkDraw(tumDrawFilledBox(my_square_x, my_square_y, 2*RADIUS, 2*RADIUS, TUMBlue), __FUNCTION__);
+                time = (double)xTaskGetTickCount() / 1000;
+
+
+                triangle_coords[0].x = SCREEN_WIDTH/2 - RADIUS + offset_x;
+                triangle_coords[0].y = SCREEN_HEIGHT/2 + RADIUS + offset_y;
+                triangle_coords[1].x = SCREEN_WIDTH/2 + offset_x;
+                triangle_coords[1].y = SCREEN_HEIGHT/2 - RADIUS + offset_y;
+                triangle_coords[2].x = SCREEN_WIDTH/2 + RADIUS + offset_x;
+                triangle_coords[2].y = SCREEN_HEIGHT/2 + RADIUS + offset_y;
+                checkDraw(tumDrawTriangle(triangle_coords, Green), __FUNCTION__);
+
+                sprintf(str, "GG EZ PZ");
+                if (!tumGetTextSize((char*)str, &str_width, NULL)){
+                    checkDraw(tumDrawText(str, SCREEN_WIDTH / 2 - str_width / 2 + offset_x, SCREEN_HEIGHT - DEFAULT_FONT_SIZE * 1.5 + offset_y, Black), __FUNCTION__);
+                }
+
+                sprintf(str, "THIS IS TOUGH");
+                if (!tumGetTextSize((char*)str, &str_width, NULL)){
+                    text_position_beg = SCREEN_WIDTH / 2 - str_width / 2 + offset;
+                    text_position_end = text_position_beg + str_width;
+                    if (text_position_end >= SCREEN_WIDTH || text_position_beg <= 0){
+                        change = -1 * change;
+                    }
+                    offset = offset + change;
+                    checkDraw(tumDrawText(str, text_position_beg + offset_x, DEFAULT_FONT_SIZE * 3.5 + offset_y, Black), __FUNCTION__);
+                }
+
+                if (xSemaphoreTake(buttons.lock, 0) == pdTRUE) {
+                    if (buttons.buttons[KEYCODE(A)]){
+                        if (flag_buttons[0] == 0){
+                            number_buttons[0]++;
+                            flag_buttons[0] = 1;
+                        }
+                    } else {
+                        flag_buttons[0] = 0;
+                    }
+                    if (buttons.buttons[KEYCODE(B)]){
+                        if (flag_buttons[1] == 0){
+                            number_buttons[1]++;
+                            flag_buttons[1] = 1;
+                        }
+                    } else {
+                        flag_buttons[1] = 0;
+                    }
+                    if (buttons.buttons[KEYCODE(C)]){
+                        if (flag_buttons[2] == 0){
+                            number_buttons[2]++;
+                            flag_buttons[2] = 1;
+                        }
+                    } else {
+                        flag_buttons[2] = 0;
+                    }
+                    if (buttons.buttons[KEYCODE(D)]){
+                        if (flag_buttons[3] == 0){
+                            number_buttons[3]++;
+                            flag_buttons[3] = 1;
+                        }
+                    } else {
+                        flag_buttons[3] = 0;
+                    }
+                    sprintf(str, "A: %d | B: %d | C: %d | D: %d", number_buttons[0], number_buttons[1], number_buttons[2], number_buttons[3]);
+                    xSemaphoreGive(buttons.lock);
+                    checkDraw(tumDrawText(str, 10 + offset_x, DEFAULT_FONT_SIZE * 0.5 + offset_y, Black), __FUNCTION__);
+                }
+
+                if (tumEventGetMouseLeft()){
+                    number_buttons[0] = 0;
+                    number_buttons[1] = 0;
+                    number_buttons[2] = 0;
+                    number_buttons[3] = 0;
+                }
+
+                sprintf(str, "Axis X: %d | Axis Y: %d", tumEventGetMouseX(), tumEventGetMouseY());
+                checkDraw(tumDrawText(str, 10 + offset_x, DEFAULT_FONT_SIZE * 1.5 + offset_y, Black), __FUNCTION__);
+
+                if (tumEventGetMouseX() - lastMouseX > 5) {
+                    offset_x = offset_x + 4;
+                } else if (tumEventGetMouseX() - lastMouseX < -5) {
+                    offset_x = offset_x - 4;
+                }
+                if (tumEventGetMouseY() - lastMouseY > 5) {
+                    offset_y = offset_y + 4;
+                } else if (tumEventGetMouseY() - lastMouseY < -5) {
+                    offset_y = offset_y - 4;
+                }
+
+                lastMouseX = tumEventGetMouseX();
+                lastMouseY = tumEventGetMouseY();
+
+                // Draw FPS in lower right corner
+                vDrawFPS();
+
+                xSemaphoreGive(ScreenLock);
+            }
     }
 }
 
