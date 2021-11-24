@@ -773,27 +773,27 @@ int main(int argc, char *argv[])
     //Infrastructure Tasks
     if (xTaskCreate(basicSequentialStateMachine, "StateMachine",
                     mainGENERIC_STACK_SIZE * 2, NULL,
-                    configMAX_PRIORITIES - 1, StateMachine) != pdPASS) {
+                    configMAX_PRIORITIES - 1, &StateMachine) != pdPASS) {
         PRINT_TASK_ERROR("StateMachine");
         goto err_statemachine;
     }
     if (xTaskCreate(vSwapBuffers, "BufferSwapTask",
                     mainGENERIC_STACK_SIZE * 2, NULL, configMAX_PRIORITIES,
-                    BufferSwap) != pdPASS) {
+                    &BufferSwap) != pdPASS) {
         PRINT_TASK_ERROR("BufferSwapTask");
         goto err_bufferswap;
     }
 
     if (xTaskCreate(vSolutionSwaper, "SolutionSwaper",
                     mainGENERIC_STACK_SIZE * 2, NULL, configMAX_PRIORITIES - 3,
-                    SolutionSwaper) != pdPASS) {
+                    &SolutionSwaper) != pdPASS) {
         PRINT_TASK_ERROR("SolutionSwaper");
         goto err_solutionswaper;
     }
 
     if (xTaskCreate(vReseter, "Reseter",
                     mainGENERIC_STACK_SIZE * 2, NULL, mainGENERIC_PRIORITY + 1,
-                    Reseter) != pdPASS) {
+                    &Reseter) != pdPASS) {
         PRINT_TASK_ERROR("Reseter");
         goto err_reseter;
     }
@@ -835,7 +835,7 @@ int main(int argc, char *argv[])
     vTaskSuspend(Task3);
     vTaskSuspend(Task4);
     vTaskSuspend(Task5);
-    //vTaskSuspend(Reseter);
+    vTaskSuspend(Reseter);
 
     vTaskStartScheduler();
 
