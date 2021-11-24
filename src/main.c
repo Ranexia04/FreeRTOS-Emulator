@@ -69,6 +69,7 @@ static StackType_t xStack[ STACK_SIZE ];
 
 static QueueHandle_t StateQueue = NULL;
 static QueueHandle_t CurrentStateQueue = NULL;
+static QueueHandle_t Task5State = NULL;
 static SemaphoreHandle_t DrawSignal = NULL;
 static SemaphoreHandle_t ScreenLock = NULL;
 static SemaphoreHandle_t SyncSignal = NULL;
@@ -206,7 +207,8 @@ void basicSequentialStateMachine(void *pvParameters)
     unsigned char current_state = STARTING_STATE; // Default state
     unsigned char state_changed =
         1; // Only re-evaluate state if it has changed
-    unsigned char input = 0;
+    unsigned char input = 0, task5_state = 1;
+    xQueueOverwrite(Task5State, &task5_state);
 
     const int state_change_period = STATE_DEBOUNCE_DELAY;
 
@@ -322,7 +324,8 @@ initial_state:
                             SCREEN_HEIGHT / 2 - DEFAULT_FONT_SIZE / 2, Black),
                             __FUNCTION__);
                     xSemaphoreGive(ScreenLock);
-                    if (Task5) {
+                    xQueuePeek(Task5State, &task5_state, portMAX_DELAY);
+                    if (Task5 && task5_state == 1) {
                         vTaskResume(Task5);
                     }
                     break;
@@ -413,7 +416,7 @@ void vSwapBuffers(void *pvParameters)
 
 int vCheckButtonInput(int key)
 {
-    unsigned char current_state;
+    unsigned char current_state, task5_state;
 
     if (xSemaphoreTake(buttons.lock, 0) == pdTRUE) {
         if (buttons.buttons[key]) {
@@ -434,9 +437,13 @@ int vCheckButtonInput(int key)
             if (key == KEYCODE(5)) {
                 if (xQueuePeek(CurrentStateQueue, &current_state, 0) == pdTRUE) {
                     if (eTaskGetState(Task5) == eSuspended && current_state == 2) {
+                        task5_state = 1;
+                        xQueueOverwrite(Task5State, &task5_state);
                         vTaskResume(Task5);
                     } else if ((eTaskGetState(Task5) == eRunning || eTaskGetState(Task5) == eReady || 
                                 eTaskGetState(Task5) == eBlocked) && current_state == 2) {
+                        task5_state = 0;
+                        xQueueOverwrite(Task5State, &task5_state);
                         vTaskSuspend(Task5);
                     }
                 }
@@ -748,6 +755,12 @@ int main(int argc, char *argv[])
         goto err_current_state_queue;
     }
 
+    Task5State = xQueueCreate(STATE_QUEUE_LENGTH, sizeof(unsigned char));
+    if (!Task5State) {
+        PRINT_ERROR("Could not open task5 state queue");
+        goto err_task5_state;
+    }
+
     //Timers
     
     xTimers = xTimerCreate("Timer", pdMS_TO_TICKS(15000), pdTRUE, (void *) 0, vTimerCallback);
@@ -847,6 +860,8 @@ int main(int argc, char *argv[])
     err_statemachine:
         xTimerDelete(xTimers, 0);
     err_timer:
+        vQueueDelete(Task5State);
+    err_task5_state:
         vQueueDelete(CurrentStateQueue);
     err_current_state_queue:
         vQueueDelete(StateQueue);
