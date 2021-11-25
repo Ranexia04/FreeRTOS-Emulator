@@ -250,6 +250,9 @@ void vTaskSuspender()
     if (StateThree_4) {
         vTaskSuspend(StateThree_4);
     }
+    if (CircleManager) {
+        vTaskSuspend(CircleManager);
+    }
 }
 
 void basicSequentialStateMachine(void *pvParameters)
@@ -299,6 +302,9 @@ initial_state:
                     if (StateTwoDrawer) {
                         vTaskResume(StateTwoDrawer);
                     }
+                    if (CircleManager) {
+                        vTaskResume(CircleManager);
+                    }
                     if (ButtonOne) {
                         vTaskResume(ButtonOne);
                     }
@@ -311,11 +317,10 @@ initial_state:
                     }
                     break;
                 case STATE_THREE:
-                    if (StateThreeDrawer) {
-                        vTaskResume(StateThreeDrawer);
-                    }
+                    vTaskDelay(1);
                     tickstate3 = xTaskGetTickCount();
                     xQueueOverwrite(InitTickQueue, &tickstate3);
+
                     if (StateThree_1) {
                         vTaskResume(StateThree_1);
                     }
@@ -328,8 +333,13 @@ initial_state:
                     if (StateThree_4) {
                         vTaskResume(StateThree_4);
                     }
+                    vTaskSuspend(BufferSwap);
+                    vTaskDelay(20);
+                    vTaskResume(BufferSwap);
+                    if (StateThreeDrawer) {
+                        vTaskResume(StateThreeDrawer);
+                    }
                     break;
-
                 default:
                     break;
             }
@@ -821,8 +831,6 @@ void vStateThreeDrawer(void *pvParameters)
         tumGetTextSize(str[i], &text_width[i], NULL);
     }
 
-    vTaskDelay(15);
-
     prints("StateThree init'd\n");
 
     while (1) {
@@ -857,8 +865,9 @@ void vStateThreeDrawer(void *pvParameters)
 
 void vStateThree_1(void *pvParameters)
 {
-    TickType_t xInitTime;
+    TickType_t xInitTime, xLastWakeTime;
     xQueuePeek(InitTickQueue, &xInitTime, portMAX_DELAY);
+    xLastWakeTime = xInitTime;
 
     tick_data_buffer_t tick_data;
     tick_data.task_number = 1;
@@ -869,18 +878,19 @@ void vStateThree_1(void *pvParameters)
         }
 
         tick_data.tick_number = xTaskGetTickCount() - xInitTime;
-        xQueueSend(TickQueue, &tick_data, portMAX_DELAY);
-
+        xQueueSend(TickQueue, &tick_data, 0);
         
         //try vtaskdelayuntil again, remeber to change tick
-        vTaskDelay(1);
+        //vTaskDelay(1);
+        vTaskDelayUntil(&xLastWakeTime, 1);
     }
 }
 
 void vStateThree_2(void *pvParameters)
 {
-    TickType_t xInitTime;
+    TickType_t xInitTime, xLastWakeTime;
     xQueuePeek(InitTickQueue, &xInitTime, portMAX_DELAY);
+    xLastWakeTime = xInitTime;
 
     tick_data_buffer_t tick_data;
     tick_data.task_number = 2;
@@ -890,11 +900,12 @@ void vStateThree_2(void *pvParameters)
             vTaskSuspend(StateThree_2);
         }
         tick_data.tick_number = xTaskGetTickCount() - xInitTime;
-        xQueueSend(TickQueue, &tick_data, portMAX_DELAY);
+        xQueueSend(TickQueue, &tick_data, 0);
 
         xSemaphoreGive(StateThreeSignal);
 
-        vTaskDelay(2);
+        //vTaskDelay(2);
+        vTaskDelayUntil(&xLastWakeTime, 2);
     }
 }
 
@@ -913,16 +924,15 @@ void vStateThree_3(void *pvParameters)
         xSemaphoreTake(StateThreeSignal, portMAX_DELAY);
 
         tick_data.tick_number = xTaskGetTickCount() - xInitTime;
-        xQueueSend(TickQueue, &tick_data, portMAX_DELAY);
-
-        
+        xQueueSend(TickQueue, &tick_data, 0);
     }
 }
 
 void vStateThree_4(void *pvParameters)
 {
-    TickType_t xInitTime;
+    TickType_t xInitTime, xLastWakeTime;
     xQueuePeek(InitTickQueue, &xInitTime, portMAX_DELAY);
+    xLastWakeTime = xInitTime;
 
     tick_data_buffer_t tick_data;
     tick_data.task_number = 4;
@@ -932,11 +942,10 @@ void vStateThree_4(void *pvParameters)
             vTaskSuspend(StateThree_4);
         }
         tick_data.tick_number = xTaskGetTickCount() - xInitTime;
-        xQueueSend(TickQueue, &tick_data, portMAX_DELAY);
+        xQueueSend(TickQueue, &tick_data, 0);
         
-        
-
-        vTaskDelay(4);
+        //vTaskDelay(4);
+        vTaskDelayUntil(&xLastWakeTime, 4);
     }
 }
 
@@ -1085,7 +1094,7 @@ int main(int argc, char *argv[])
     }
 
     if (xTaskCreate(vCircleManager, "CircleManager",
-                    mainGENERIC_STACK_SIZE * 2, NULL, mainGENERIC_PRIORITY + 6,
+                    mainGENERIC_STACK_SIZE * 2, NULL, mainGENERIC_PRIORITY,
                     &CircleManager) != pdPASS) {
         PRINT_TASK_ERROR("CircleManager");
         goto err_circle_manager;
@@ -1131,7 +1140,7 @@ int main(int argc, char *argv[])
     }
 
     if (xTaskCreate(vStateThreeDrawer, "StateThreeDrawer", mainGENERIC_STACK_SIZE * 2,
-                    NULL, mainGENERIC_PRIORITY + 3, &StateThreeDrawer) != pdPASS) {
+                    NULL, mainGENERIC_PRIORITY, &StateThreeDrawer) != pdPASS) {
         PRINT_TASK_ERROR("StateOneDrawer");
         goto err_StateThreeDrawer;
     }
