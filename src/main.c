@@ -24,7 +24,7 @@
 #define mainGENERIC_PRIORITY (tskIDLE_PRIORITY)
 #define mainGENERIC_STACK_SIZE ((unsigned short)2560)
 #define STACK_SIZE mainGENERIC_STACK_SIZE * 2
-#define NUM_TIMERS 1
+#define NUM_TIMERS 3
 
 #define STATE_QUEUE_LENGTH 1
 
@@ -86,6 +86,7 @@ static SemaphoreHandle_t SyncSignal = NULL;
 static SemaphoreHandle_t StateThreeSignal = NULL;
 
 static TimerHandle_t xTimers;
+static TimerHandle_t xTimersTick[ NUM_TIMERS ];
 
 static image_handle_t logo_image = NULL;
 
@@ -824,12 +825,14 @@ void vStateThreeDrawer(void *pvParameters)
 
     tick_data_buffer_t tick_data;
 
-    int i = 0;
+    int i;
 
-    for (int i = 0; i<15; i++) {
+    for (i = 0; i < 15; i++) {
         sprintf(str[i], "Tick %d:  ", i);
         tumGetTextSize(str[i], &text_width[i], NULL);
     }
+
+    TickType_t xInitTime;
 
     prints("StateThree init'd\n");
 
@@ -843,16 +846,18 @@ void vStateThreeDrawer(void *pvParameters)
         checkDraw(tumDrawClear(White), __FUNCTION__);
         vDrawStaticItems();
 
+        xQueuePeek(InitTickQueue, &xInitTime, portMAX_DELAY);
         while(uxQueueMessagesWaiting(TickQueue)) {
             xQueueReceive(TickQueue, &tick_data, portMAX_DELAY);
-            printf("%d      %d\n", tick_data.tick_number, tick_data.task_number);
+            tick_data.tick_number = tick_data.tick_number - xInitTime;
+            prints("%d      %d\n", tick_data.tick_number, tick_data.task_number);
             i = tick_data.tick_number;
             sprintf(buffer, "   %d", tick_data.task_number);
             strcat(str[i], buffer);
             tumGetTextSize(str[i], &text_width[i], NULL);
         }
 
-        for (int i = 0; i<15; i++) {
+        for (i = 0; i < 15; i++) {
             tumDrawText(str[i], SCREEN_WIDTH / 2 - text_width[i] / 2, SCREEN_HEIGHT * i / 15, Black);
         }
 
@@ -863,49 +868,73 @@ void vStateThreeDrawer(void *pvParameters)
     }
 }
 
-void vStateThree_1(void *pvParameters)
+void vTimersTick(TimerHandle_t xTimer)
 {
-    TickType_t xInitTime, xLastWakeTime;
-    xQueuePeek(InitTickQueue, &xInitTime, portMAX_DELAY);
-    xLastWakeTime = xInitTime;
+    int id;
+    id = (int) pvTimerGetTimerID(xTimer);
 
     tick_data_buffer_t tick_data;
-    tick_data.task_number = 1;
+    switch (id) {
+        case 1:
+            tick_data.task_number = 1;
+            break;
+        case 2:
+            tick_data.task_number = 2;
+            break;
+        case 4:
+            tick_data.task_number = 4;
+            break;
+        default:
+            break;
+    }
+    tick_data.tick_number = xTaskGetTickCount();
+    xQueueSend(TickQueue, &tick_data, portMAX_DELAY);
+
+    if (id == 2)
+        xSemaphoreGive(StateThreeSignal);
+
+    switch (id) {
+        case 1:
+            vTaskResume(StateThree_1);
+            break;
+        case 2:
+            vTaskResume(StateThree_2);
+            break;
+        case 4:
+            vTaskResume(StateThree_4);
+            break;
+        default:
+            break;
+    }
+}
+
+void vStateThree_1(void *pvParameters)
+{
+    TickType_t xInitTime;
+    xQueuePeek(InitTickQueue, &xInitTime, portMAX_DELAY);
 
     while (1) {
         if (xTaskGetTickCount() - xInitTime >= 15) {
+            xTimerStop(xTimersTick[0], portMAX_DELAY);
             vTaskSuspend(StateThree_1);
         }
-
-        tick_data.tick_number = xTaskGetTickCount() - xInitTime;
-        xQueueSend(TickQueue, &tick_data, 0);
-        
-        //try vtaskdelayuntil again, remeber to change tick
-        //vTaskDelay(1);
-        vTaskDelayUntil(&xLastWakeTime, 1);
+        xTimerStart(xTimersTick[0], portMAX_DELAY);
+        vTaskSuspend(StateThree_1);
     }
 }
 
 void vStateThree_2(void *pvParameters)
 {
-    TickType_t xInitTime, xLastWakeTime;
+    TickType_t xInitTime;
     xQueuePeek(InitTickQueue, &xInitTime, portMAX_DELAY);
-    xLastWakeTime = xInitTime;
-
-    tick_data_buffer_t tick_data;
-    tick_data.task_number = 2;
 
     while (1) {
         if (xTaskGetTickCount() - xInitTime >= 15) {
+            xTimerStop(xTimersTick[1], portMAX_DELAY);
             vTaskSuspend(StateThree_2);
         }
-        tick_data.tick_number = xTaskGetTickCount() - xInitTime;
-        xQueueSend(TickQueue, &tick_data, 0);
-
-        xSemaphoreGive(StateThreeSignal);
-
-        //vTaskDelay(2);
-        vTaskDelayUntil(&xLastWakeTime, 2);
+        xTimerStart(xTimersTick[1], portMAX_DELAY);
+        vTaskSuspend(StateThree_2);
     }
 }
 
@@ -918,34 +947,29 @@ void vStateThree_3(void *pvParameters)
     tick_data.task_number = 3;
 
     while (1) {
+        xSemaphoreTake(StateThreeSignal, portMAX_DELAY);
+
         if (xTaskGetTickCount() - xInitTime >= 15) {
             vTaskSuspend(StateThree_3);
         }
-        xSemaphoreTake(StateThreeSignal, portMAX_DELAY);
 
-        tick_data.tick_number = xTaskGetTickCount() - xInitTime;
-        xQueueSend(TickQueue, &tick_data, 0);
+        tick_data.tick_number = xTaskGetTickCount();
+        xQueueSend(TickQueue, &tick_data, portMAX_DELAY);
     }
 }
 
 void vStateThree_4(void *pvParameters)
 {
-    TickType_t xInitTime, xLastWakeTime;
+    TickType_t xInitTime;
     xQueuePeek(InitTickQueue, &xInitTime, portMAX_DELAY);
-    xLastWakeTime = xInitTime;
-
-    tick_data_buffer_t tick_data;
-    tick_data.task_number = 4;
 
     while (1) {
         if (xTaskGetTickCount() - xInitTime >= 15) {
+            xTimerStop(xTimersTick[2], portMAX_DELAY);
             vTaskSuspend(StateThree_4);
         }
-        tick_data.tick_number = xTaskGetTickCount() - xInitTime;
-        xQueueSend(TickQueue, &tick_data, 0);
-        
-        //vTaskDelay(4);
-        vTaskDelayUntil(&xLastWakeTime, 4);
+        xTimerStart(xTimersTick[2], portMAX_DELAY);
+        vTaskSuspend(StateThree_4);
     }
 }
 
@@ -1078,6 +1102,15 @@ int main(int argc, char *argv[])
         goto err_timer;
     }
     
+    for (int i = 0; i < NUM_TIMERS; i++) {
+        xTimersTick[i] = xTimerCreate("Timer", i + 1, pdTRUE, NULL, vTimersTick);
+    }
+
+    vTimerSetTimerID(xTimersTick[0], (void *)1);
+    vTimerSetTimerID(xTimersTick[1], (void *)2);
+    vTimerSetTimerID(xTimersTick[2], (void *)4);
+    xTimerChangePeriod(xTimersTick[2], 4, portMAX_DELAY);
+    xTimerStop(xTimersTick[2], portMAX_DELAY);
 
     //Infrastructure Tasks
     if (xTaskCreate(basicSequentialStateMachine, "StateMachine",
