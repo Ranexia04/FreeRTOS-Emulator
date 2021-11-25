@@ -28,7 +28,7 @@
 
 #define STATE_QUEUE_LENGTH 1
 
-#define STATE_COUNT 2
+#define STATE_COUNT 3
 
 #define STATE_ONE 0
 #define STATE_TWO 1
@@ -58,13 +58,18 @@ const unsigned char prev_state_signal = PREV_TASK;
 
 static TaskHandle_t StateMachine = NULL;
 static TaskHandle_t BufferSwap = NULL;
+static TaskHandle_t StateOneDrawer = NULL;
 static TaskHandle_t CircleManager = NULL;
 static TaskHandle_t Reseter = NULL;
-static TaskHandle_t StateOneDrawer = NULL;
-static TaskHandle_t StateTwoDrawer = NULL;
 static TaskHandle_t ButtonOne = NULL;
 static TaskHandle_t ButtonTwo = NULL;
 static TaskHandle_t Incrementing = NULL;
+static TaskHandle_t StateTwoDrawer = NULL;
+static TaskHandle_t StateThree_1 = NULL;
+static TaskHandle_t StateThree_2 = NULL;
+static TaskHandle_t StateThree_3 = NULL;
+static TaskHandle_t StateThree_4 = NULL;
+static TaskHandle_t StateThreeDrawer = NULL;
 
 static StaticTask_t StateTwoDrawerBuffer;
 static StackType_t xStack[ STACK_SIZE ];
@@ -76,6 +81,7 @@ static QueueHandle_t IncrementingQueue = NULL;
 static SemaphoreHandle_t DrawSignal = NULL;
 static SemaphoreHandle_t ScreenLock = NULL;
 static SemaphoreHandle_t SyncSignal = NULL;
+static SemaphoreHandle_t StateThreeSignal = NULL;
 
 static TimerHandle_t xTimers;
 
@@ -222,6 +228,21 @@ void vTaskSuspender()
     if (Incrementing) {
         vTaskSuspend(Incrementing);
     }
+    if (StateThreeDrawer) {
+        vTaskSuspend(StateThreeDrawer);
+    }
+    if (StateThree_1) {
+        vTaskSuspend(StateThree_1);
+    }
+    if (StateThree_2) {
+        vTaskSuspend(StateThree_2);
+    }
+    if (StateThree_3) {
+        vTaskSuspend(StateThree_3);
+    }
+    if (StateThree_4) {
+        vTaskSuspend(StateThree_4);
+    }
 }
 
 void basicSequentialStateMachine(void *pvParameters)
@@ -282,7 +303,21 @@ initial_state:
                     }
                     break;
                 case STATE_THREE:
-                    
+                    if (StateThreeDrawer) {
+                        vTaskResume(StateThreeDrawer);
+                    }
+                    if (StateThree_1) {
+                        vTaskResume(StateThree_1);
+                    }
+                    if (StateThree_2) {
+                        vTaskResume(StateThree_2);
+                    }
+                    if (StateThree_3) {
+                        vTaskResume(StateThree_3);
+                    }
+                    if (StateThree_4) {
+                        vTaskResume(StateThree_4);
+                    }
                     break;
 
                 default:
@@ -377,30 +412,31 @@ int vCheckButtonInput(int key)
         if (buttons.buttons[key]) {
             buttons.buttons[key] = 0;
             xSemaphoreGive(buttons.lock);
-            if (key == KEYCODE(1))
-                if (xQueuePeek(CurrentStateQueue, &current_state, 0) == pdTRUE) {
-                    if (current_state == STATE_TWO)
-                        xSemaphoreGive(SyncSignal);
-                }
-                
-            if (key == KEYCODE(2))
-                if (xQueuePeek(CurrentStateQueue, &current_state, 0) == pdTRUE) {
-                    if (current_state == STATE_TWO)
-                        xTaskNotifyGive(ButtonTwo);
-                }
 
-            if (key == KEYCODE(3)) {
-                if (xQueuePeek(CurrentStateQueue, &current_state, 0) == pdTRUE) {
-                    if (eTaskGetState(Incrementing) == eSuspended && current_state == STATE_TWO) {
-                        Incrementing_state = 1;
-                        xQueueOverwrite(IncrementingQueue, &Incrementing_state);
-                        vTaskResume(Incrementing);
-                    } else if ((eTaskGetState(Incrementing) == eRunning || eTaskGetState(Incrementing) == eReady || 
+            if (xQueuePeek(CurrentStateQueue, &current_state, 0) == pdTRUE) {
+                switch (key) {
+                    case KEYCODE(1):
+                        if (current_state == STATE_TWO)
+                            xSemaphoreGive(SyncSignal);
+                        break;
+                    case KEYCODE(2):
+                        if (current_state == STATE_TWO)
+                            xTaskNotifyGive(ButtonTwo);
+                        break;
+                    case KEYCODE(3):
+                        if (eTaskGetState(Incrementing) == eSuspended && current_state == STATE_TWO) {
+                            Incrementing_state = 1;
+                            xQueueOverwrite(IncrementingQueue, &Incrementing_state);
+                            vTaskResume(Incrementing);
+                        } else if ((eTaskGetState(Incrementing) == eRunning || eTaskGetState(Incrementing) == eReady || 
                                 eTaskGetState(Incrementing) == eBlocked) && current_state == STATE_TWO) {
-                        Incrementing_state = 0;
-                        xQueueOverwrite(IncrementingQueue, &Incrementing_state);
-                        vTaskSuspend(Incrementing);
-                    }
+                            Incrementing_state = 0;
+                            xQueueOverwrite(IncrementingQueue, &Incrementing_state);
+                            vTaskSuspend(Incrementing);
+                        }
+                        break;
+                    default:
+                    break;
                 }
             }
             return 0;
@@ -594,9 +630,7 @@ void vCircleManager(void *pvParameters)
 
         write_flags[0]++;
         if (write_flags[0] == 2) {
-            prints("%c", write_circle[0]);
             write_circle[0] = !write_circle[0];
-            prints("%c", write_circle[0]);
             write_flags[0] = 0;
         }
 
@@ -762,6 +796,102 @@ void vIncrementing(void *pvParameters)
     }
 }
 
+void vStateThreeDrawer(void *pvParameters)
+{
+    static char str[100] = { 0 };
+    static int text_width;
+
+    prints("StateThree init'd\n");
+
+    while (1) {
+        xSemaphoreTake(DrawSignal, portMAX_DELAY);
+        tumEventFetchEvents(FETCH_EVENT_BLOCK |
+                                    FETCH_EVENT_NO_GL_CHECK);
+        xGetButtonInput(); // Update global input
+
+        xSemaphoreTake(ScreenLock, portMAX_DELAY);
+        checkDraw(tumDrawClear(White), __FUNCTION__);
+        vDrawStaticItems();
+
+        for (int i = 0; i<15; i++) {
+            sprintf(str, "Tick %d:  ", i);
+            //maybe concatenize after sucesefuly reading from queue
+            tumGetTextSize(str, &text_width, NULL);
+            tumDrawText(str, SCREEN_WIDTH / 2 - text_width / 2, SCREEN_HEIGHT * i / 15, Black);
+        }
+
+        vDrawFPS();
+        xSemaphoreGive(ScreenLock);
+
+        vCheckKeyboardInput();
+    }
+}
+
+void vStateThree_1(void *pvParameters)
+{
+    TickType_t xInitTime;
+    xInitTime = xTaskGetTickCount();
+
+    while (1) {
+
+
+        if (xTaskGetTickCount() - xInitTime >= 15) {
+            vTaskSuspend(StateThree_1);
+        }
+
+        vTaskDelay(1);
+    }
+}
+
+void vStateThree_2(void *pvParameters)
+{
+    TickType_t xInitTime;
+    xInitTime = xTaskGetTickCount();
+
+    while (1) {
+
+        xSemaphoreGive(StateThreeSignal);
+
+        if (xTaskGetTickCount() - xInitTime >= 15) {
+            vTaskSuspend(StateThree_2);
+        }
+
+        vTaskDelay(2);
+    }
+}
+
+void vStateThree_3(void *pvParameters)
+{
+    TickType_t xInitTime;
+    xInitTime = xTaskGetTickCount();
+
+    while (1) {
+        xSemaphoreTake(StateThreeSignal, portMAX_DELAY);
+
+
+
+        if (xTaskGetTickCount() - xInitTime >= 15) {
+            vTaskSuspend(StateThree_3);
+        }
+    }
+}
+
+void vStateThree_4(void *pvParameters)
+{
+    TickType_t xInitTime;
+    xInitTime = xTaskGetTickCount();
+
+    while (1) {
+
+        
+        if (xTaskGetTickCount() - xInitTime >= 15) {
+            vTaskSuspend(StateThree_4);
+        }
+
+        vTaskDelay(4);
+    }
+}
+
 #define PRINT_TASK_ERROR(task) PRINT_ERROR("Failed to print task ##task");
 
 int main(int argc, char *argv[])
@@ -815,6 +945,12 @@ int main(int argc, char *argv[])
     if(!SyncSignal) {
         PRINT_ERROR("Failed to create buttons lock");
         goto err_sync_signal;
+    }
+
+    StateThreeSignal = xSemaphoreCreateBinary();
+    if(!StateThreeSignal) {
+        PRINT_ERROR("Failed to create StateThreeSignal");
+        goto err_StateThreeSignal;
     }
 
     buttons.lock = xSemaphoreCreateMutex(); // Locking mechanism
@@ -934,12 +1070,54 @@ int main(int argc, char *argv[])
         goto err_Incrementing;
     }
 
+    if (xTaskCreate(vStateThreeDrawer, "StateThreeDrawer", mainGENERIC_STACK_SIZE * 2,
+                    NULL, mainGENERIC_PRIORITY + 3, &StateThreeDrawer) != pdPASS) {
+        PRINT_TASK_ERROR("StateOneDrawer");
+        goto err_StateThreeDrawer;
+    }
+
+    if (xTaskCreate(vStateThree_1, "StateThree_1", mainGENERIC_STACK_SIZE * 2,
+                    NULL, mainGENERIC_PRIORITY + 1, &StateThree_1) != pdPASS) {
+        PRINT_TASK_ERROR("StateThree_1");
+        goto err_StateThree_1;
+    }
+
+    if (xTaskCreate(vStateThree_2, "StateThree_2", mainGENERIC_STACK_SIZE * 2,
+                    NULL, mainGENERIC_PRIORITY + 2, &StateThree_2) != pdPASS) {
+        PRINT_TASK_ERROR("StateThree_2");
+        goto err_StateThree_2;
+    }
+
+    if (xTaskCreate(vStateThree_3, "StateThree_3", mainGENERIC_STACK_SIZE * 2,
+                    NULL, mainGENERIC_PRIORITY + 3, &StateThree_3) != pdPASS) {
+        PRINT_TASK_ERROR("StateThree_3");
+        goto err_StateThree_3;
+    }
+
+    if (xTaskCreate(vStateThree_4, "StateThree_4", mainGENERIC_STACK_SIZE * 2,
+                    NULL, mainGENERIC_PRIORITY + 4, &StateThree_4) != pdPASS) {
+        PRINT_TASK_ERROR("StateThree_4");
+        goto err_StateThree_4;
+    }
+
+
     vTaskSuspender();
 
     vTaskStartScheduler();
 
     return EXIT_SUCCESS;
 
+        vTaskDelete(StateThree_4);
+    err_StateThree_4:
+        vTaskDelete(StateThree_3);
+    err_StateThree_3:
+        vTaskDelete(StateThree_2);
+    err_StateThree_2:
+        vTaskDelete(StateThree_1);
+    err_StateThree_1:
+        vTaskDelete(StateThreeDrawer);
+    err_StateThreeDrawer:
+        vTaskDelete(Incrementing);
     err_Incrementing:
         vTaskDelete(ButtonTwo);
     err_ButtonTwo:
@@ -975,6 +1153,8 @@ int main(int argc, char *argv[])
     err_solution3_lock:    
         vSemaphoreDelete(buttons.lock);
     err_buttons_lock:
+        vSemaphoreDelete(StateThreeSignal);
+    err_StateThreeSignal:
         vSemaphoreDelete(SyncSignal);
     err_sync_signal:
         tumSoundExit();
