@@ -78,6 +78,8 @@ static QueueHandle_t StateQueue = NULL;
 static QueueHandle_t CurrentStateQueue = NULL;
 static QueueHandle_t CircleQueue = NULL;
 static QueueHandle_t IncrementingQueue = NULL;
+static QueueHandle_t TickQueue = NULL;
+static QueueHandle_t InitTickQueue = NULL;
 static SemaphoreHandle_t DrawSignal = NULL;
 static SemaphoreHandle_t ScreenLock = NULL;
 static SemaphoreHandle_t SyncSignal = NULL;
@@ -102,6 +104,11 @@ typedef struct solution3_buffer {
 } solution3_buffer_t;
 
 static solution3_buffer_t solution3 = { 0 };
+
+typedef struct tick_data_buffer {
+    int task_number;
+    int tick_number;
+} tick_data_buffer_t;
 
 void checkDraw(unsigned char status, const char *msg)
 {
@@ -256,6 +263,7 @@ void basicSequentialStateMachine(void *pvParameters)
     const int state_change_period = STATE_DEBOUNCE_DELAY;
 
     TickType_t last_change = xTaskGetTickCount();
+    TickType_t tickstate3;
 
     while (1) {
         if (state_changed) {
@@ -306,6 +314,8 @@ initial_state:
                     if (StateThreeDrawer) {
                         vTaskResume(StateThreeDrawer);
                     }
+                    tickstate3 = xTaskGetTickCount();
+                    xQueueOverwrite(InitTickQueue, &tickstate3);
                     if (StateThree_1) {
                         vTaskResume(StateThree_1);
                     }
@@ -798,8 +808,20 @@ void vIncrementing(void *pvParameters)
 
 void vStateThreeDrawer(void *pvParameters)
 {
-    static char str[100] = { 0 };
-    static int text_width;
+    static char str[15][100] = { 0 };
+    static char buffer[100] = {0};
+    static int text_width[15];
+
+    tick_data_buffer_t tick_data;
+
+    int i = 0;
+
+    for (int i = 0; i<15; i++) {
+        sprintf(str[i], "Tick %d:  ", i);
+        tumGetTextSize(str[i], &text_width[i], NULL);
+    }
+
+    vTaskDelay(15);
 
     prints("StateThree init'd\n");
 
@@ -813,11 +835,17 @@ void vStateThreeDrawer(void *pvParameters)
         checkDraw(tumDrawClear(White), __FUNCTION__);
         vDrawStaticItems();
 
+        while(uxQueueMessagesWaiting(TickQueue)) {
+            xQueueReceive(TickQueue, &tick_data, portMAX_DELAY);
+            printf("%d      %d\n", tick_data.tick_number, tick_data.task_number);
+            i = tick_data.tick_number;
+            sprintf(buffer, "   %d", tick_data.task_number);
+            strcat(str[i], buffer);
+            tumGetTextSize(str[i], &text_width[i], NULL);
+        }
+
         for (int i = 0; i<15; i++) {
-            sprintf(str, "Tick %d:  ", i);
-            //maybe concatenize after sucesefuly reading from queue
-            tumGetTextSize(str, &text_width, NULL);
-            tumDrawText(str, SCREEN_WIDTH / 2 - text_width / 2, SCREEN_HEIGHT * i / 15, Black);
+            tumDrawText(str[i], SCREEN_WIDTH / 2 - text_width[i] / 2, SCREEN_HEIGHT * i / 15, Black);
         }
 
         vDrawFPS();
@@ -830,15 +858,21 @@ void vStateThreeDrawer(void *pvParameters)
 void vStateThree_1(void *pvParameters)
 {
     TickType_t xInitTime;
-    xInitTime = xTaskGetTickCount();
+    xQueuePeek(InitTickQueue, &xInitTime, portMAX_DELAY);
+
+    tick_data_buffer_t tick_data;
+    tick_data.task_number = 1;
 
     while (1) {
-
-
         if (xTaskGetTickCount() - xInitTime >= 15) {
             vTaskSuspend(StateThree_1);
         }
 
+        tick_data.tick_number = xTaskGetTickCount() - xInitTime;
+        xQueueSend(TickQueue, &tick_data, portMAX_DELAY);
+
+        
+        //try vtaskdelayuntil again, remeber to change tick
         vTaskDelay(1);
     }
 }
@@ -846,15 +880,19 @@ void vStateThree_1(void *pvParameters)
 void vStateThree_2(void *pvParameters)
 {
     TickType_t xInitTime;
-    xInitTime = xTaskGetTickCount();
+    xQueuePeek(InitTickQueue, &xInitTime, portMAX_DELAY);
+
+    tick_data_buffer_t tick_data;
+    tick_data.task_number = 2;
 
     while (1) {
-
-        xSemaphoreGive(StateThreeSignal);
-
         if (xTaskGetTickCount() - xInitTime >= 15) {
             vTaskSuspend(StateThree_2);
         }
+        tick_data.tick_number = xTaskGetTickCount() - xInitTime;
+        xQueueSend(TickQueue, &tick_data, portMAX_DELAY);
+
+        xSemaphoreGive(StateThreeSignal);
 
         vTaskDelay(2);
     }
@@ -863,30 +901,40 @@ void vStateThree_2(void *pvParameters)
 void vStateThree_3(void *pvParameters)
 {
     TickType_t xInitTime;
-    xInitTime = xTaskGetTickCount();
+    xQueuePeek(InitTickQueue, &xInitTime, portMAX_DELAY);
+
+    tick_data_buffer_t tick_data;
+    tick_data.task_number = 3;
 
     while (1) {
-        xSemaphoreTake(StateThreeSignal, portMAX_DELAY);
-
-
-
         if (xTaskGetTickCount() - xInitTime >= 15) {
             vTaskSuspend(StateThree_3);
         }
+        xSemaphoreTake(StateThreeSignal, portMAX_DELAY);
+
+        tick_data.tick_number = xTaskGetTickCount() - xInitTime;
+        xQueueSend(TickQueue, &tick_data, portMAX_DELAY);
+
+        
     }
 }
 
 void vStateThree_4(void *pvParameters)
 {
     TickType_t xInitTime;
-    xInitTime = xTaskGetTickCount();
+    xQueuePeek(InitTickQueue, &xInitTime, portMAX_DELAY);
+
+    tick_data_buffer_t tick_data;
+    tick_data.task_number = 4;
 
     while (1) {
-
-        
         if (xTaskGetTickCount() - xInitTime >= 15) {
             vTaskSuspend(StateThree_4);
         }
+        tick_data.tick_number = xTaskGetTickCount() - xInitTime;
+        xQueueSend(TickQueue, &tick_data, portMAX_DELAY);
+        
+        
 
         vTaskDelay(4);
     }
@@ -983,22 +1031,34 @@ int main(int argc, char *argv[])
         goto err_state_queue;
     }
 
-    CurrentStateQueue = xQueueCreate(STATE_QUEUE_LENGTH, sizeof(unsigned char));
+    CurrentStateQueue = xQueueCreate(1, sizeof(unsigned char));
     if (!CurrentStateQueue) {
         PRINT_ERROR("Could not open current state queue");
         goto err_current_state_queue;
     }
 
-    CircleQueue = xQueueCreate(STATE_QUEUE_LENGTH, sizeof(int*));
+    CircleQueue = xQueueCreate(1, sizeof(int*));
     if (!CircleQueue) {
         PRINT_ERROR("Could not open circle queue");
         goto err_circle_queue;
     }
 
-    IncrementingQueue = xQueueCreate(STATE_QUEUE_LENGTH, sizeof(unsigned char));
+    IncrementingQueue = xQueueCreate(1, sizeof(unsigned char));
     if (!IncrementingQueue) {
         PRINT_ERROR("Could not open Incrementing state queue");
         goto err_Incrementing_state;
+    }
+
+    TickQueue = xQueueCreate(35, sizeof(tick_data_buffer_t));
+    if (!TickQueue) {
+        PRINT_ERROR("Could not open tick queue");
+        goto err_Tick_queue;
+    }
+
+    InitTickQueue = xQueueCreate(1, sizeof(TickType_t));
+    if (!InitTickQueue) {
+        PRINT_ERROR("Could not open init tick queue");
+        goto err_Init_Tick_queue;
     }
 
     //Timers
@@ -1137,6 +1197,10 @@ int main(int argc, char *argv[])
     err_statemachine:
         xTimerDelete(xTimers, 0);
     err_timer:
+        vQueueDelete(InitTickQueue);
+    err_Init_Tick_queue:
+        vQueueDelete(TickQueue);
+    err_Tick_queue:
         vQueueDelete(IncrementingQueue);
     err_Incrementing_state:
         vQueueDelete(CircleManager);
