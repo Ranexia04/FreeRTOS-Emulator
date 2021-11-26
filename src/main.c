@@ -1108,12 +1108,12 @@ int main(int argc, char *argv[])
     //Infrastructure Tasks
     if (xTaskCreate(basicSequentialStateMachine, "StateMachine",
                     mainGENERIC_STACK_SIZE * 2, NULL,
-                    configMAX_PRIORITIES - 1, &StateMachine) != pdPASS) {
+                    configMAX_PRIORITIES - 2, &StateMachine) != pdPASS) {
         PRINT_TASK_ERROR("StateMachine");
         goto err_statemachine;
     }
     if (xTaskCreate(vSwapBuffers, "BufferSwapTask",
-                    mainGENERIC_STACK_SIZE * 2, NULL, configMAX_PRIORITIES,
+                    mainGENERIC_STACK_SIZE * 2, NULL, configMAX_PRIORITIES - 1,
                     &BufferSwap) != pdPASS) {
         PRINT_TASK_ERROR("BufferSwapTask");
         goto err_bufferswap;
