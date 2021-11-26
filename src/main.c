@@ -19,7 +19,7 @@
 #include "TUM_FreeRTOS_Utils.h"
 #include "TUM_Print.h"
 
-#include "AsyncIO.h"
+//#include "AsyncIO.h"
 
 #define mainGENERIC_PRIORITY (tskIDLE_PRIORITY)
 #define mainGENERIC_STACK_SIZE ((unsigned short)2560)
