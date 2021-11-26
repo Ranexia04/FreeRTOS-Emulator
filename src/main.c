@@ -819,14 +819,17 @@ void vIncrementing(void *pvParameters)
 void vStateThreeDrawer(void *pvParameters)
 {
     static char str[15][100] = { 0 };
-    static char buffer[100] = {0};
+    static char buffer[100] = {0}, buffer2[100] = {0};
     static int text_width[15];
+    sprintf(buffer2, " | ");
 
     tick_data_buffer_t tick_data;
 
+    TickType_t xInitTime;
+
     int i = 0;
 
-    for (int i = 0; i<15; i++) {
+    for (i = 0; i<15; i++) {
         sprintf(str[i], "Tick %d:  ", i);
         tumGetTextSize(str[i], &text_width[i], NULL);
     }
@@ -838,10 +841,7 @@ void vStateThreeDrawer(void *pvParameters)
         tumEventFetchEvents(FETCH_EVENT_BLOCK |
                                     FETCH_EVENT_NO_GL_CHECK);
         xGetButtonInput(); // Update global input
-
-        xSemaphoreTake(ScreenLock, portMAX_DELAY);
-        checkDraw(tumDrawClear(White), __FUNCTION__);
-        vDrawStaticItems();
+        xQueuePeek(InitTickQueue, &xInitTime, portMAX_DELAY);
 
         while(uxQueueMessagesWaiting(TickQueue)) {
             xQueueReceive(TickQueue, &tick_data, portMAX_DELAY);
@@ -852,9 +852,17 @@ void vStateThreeDrawer(void *pvParameters)
             tumGetTextSize(str[i], &text_width[i], NULL);
         }
 
-        for (int i = 0; i<15; i++) {
+        xSemaphoreTake(ScreenLock, portMAX_DELAY);
+        checkDraw(tumDrawClear(White), __FUNCTION__);
+        vDrawStaticItems();
+
+        for (i = 0; i < 15; i++) {
+            if (xTaskGetTickCount() - xInitTime < 35) {
+                strcat(str[i] , buffer2);
+            }
             tumDrawText(str[i], SCREEN_WIDTH / 2 - text_width[i] / 2, SCREEN_HEIGHT * i / 15, Black);
         }
+        
 
         vDrawFPS();
         xSemaphoreGive(ScreenLock);
@@ -865,16 +873,20 @@ void vStateThreeDrawer(void *pvParameters)
 
 void vStateThree_1(void *pvParameters)
 {
+
     TickType_t xInitTime, xLastWakeTime;
+    tick_data_buffer_t tick_data;
+begin1:
     xQueuePeek(InitTickQueue, &xInitTime, portMAX_DELAY);
     xLastWakeTime = xInitTime;
 
-    tick_data_buffer_t tick_data;
+    
     tick_data.task_number = 1;
 
     while (1) {
         if (xTaskGetTickCount() - xInitTime >= 15) {
             vTaskSuspend(StateThree_1);
+            goto begin1;
         }
 
         tick_data.tick_number = xTaskGetTickCount() - xInitTime;
@@ -888,16 +900,20 @@ void vStateThree_1(void *pvParameters)
 
 void vStateThree_2(void *pvParameters)
 {
+
     TickType_t xInitTime, xLastWakeTime;
+    tick_data_buffer_t tick_data;
+begin2:
     xQueuePeek(InitTickQueue, &xInitTime, portMAX_DELAY);
     xLastWakeTime = xInitTime;
 
-    tick_data_buffer_t tick_data;
+    
     tick_data.task_number = 2;
 
     while (1) {
         if (xTaskGetTickCount() - xInitTime >= 15) {
             vTaskSuspend(StateThree_2);
+            goto begin2;
         }
         tick_data.tick_number = xTaskGetTickCount() - xInitTime;
         xQueueSend(TickQueue, &tick_data, 0);
@@ -911,35 +927,49 @@ void vStateThree_2(void *pvParameters)
 
 void vStateThree_3(void *pvParameters)
 {
+
     TickType_t xInitTime;
+    tick_data_buffer_t tick_data;
+    static int flag = 0;
+begin3:
     xQueuePeek(InitTickQueue, &xInitTime, portMAX_DELAY);
 
-    tick_data_buffer_t tick_data;
-    tick_data.task_number = 3;
+    if (flag == 1) {
+        goto begin_again;
+    }
+    
+    
 
     while (1) {
-        if (xTaskGetTickCount() - xInitTime >= 15) {
-            vTaskSuspend(StateThree_3);
-        }
         xSemaphoreTake(StateThreeSignal, portMAX_DELAY);
+        flag = 0;
+        if (xTaskGetTickCount() - xInitTime >= 15) {
+            flag = 1;
+            goto begin3;
+        }
 
+begin_again:
         tick_data.tick_number = xTaskGetTickCount() - xInitTime;
+        tick_data.task_number = 3;
         xQueueSend(TickQueue, &tick_data, 0);
     }
 }
 
 void vStateThree_4(void *pvParameters)
 {
+
     TickType_t xInitTime, xLastWakeTime;
+    tick_data_buffer_t tick_data;
+begin4:
     xQueuePeek(InitTickQueue, &xInitTime, portMAX_DELAY);
     xLastWakeTime = xInitTime;
-
-    tick_data_buffer_t tick_data;
+    
     tick_data.task_number = 4;
 
     while (1) {
         if (xTaskGetTickCount() - xInitTime >= 15) {
             vTaskSuspend(StateThree_4);
+            goto begin4;
         }
         tick_data.tick_number = xTaskGetTickCount() - xInitTime;
         xQueueSend(TickQueue, &tick_data, 0);
