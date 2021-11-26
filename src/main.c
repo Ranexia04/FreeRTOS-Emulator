@@ -870,23 +870,24 @@ void vStateThreeDrawer(void *pvParameters)
 
 void vTimersTick(TimerHandle_t xTimer)
 {
+    TickType_t xInitTime;
+    xQueuePeek(InitTickQueue, &xInitTime, portMAX_DELAY);
+    if (xTaskGetTickCount() - xInitTime >= 15) {
+        xTimerStop(xTimersTick[0], portMAX_DELAY);
+        xTimerStop(xTimersTick[1], portMAX_DELAY);
+        xTimerStop(xTimersTick[2], portMAX_DELAY);
+        vTaskSuspend(StateThree_1);
+        vTaskSuspend(StateThree_2);
+        vTaskSuspend(StateThree_3);
+        vTaskSuspend(StateThree_4);
+        return;
+    }
+
     int id;
     id = (int) pvTimerGetTimerID(xTimer);
 
     tick_data_buffer_t tick_data;
-    switch (id) {
-        case 1:
-            tick_data.task_number = 1;
-            break;
-        case 2:
-            tick_data.task_number = 2;
-            break;
-        case 4:
-            tick_data.task_number = 4;
-            break;
-        default:
-            break;
-    }
+    tick_data.task_number = id;
     tick_data.tick_number = xTaskGetTickCount();
     xQueueSend(TickQueue, &tick_data, portMAX_DELAY);
 
@@ -910,49 +911,31 @@ void vTimersTick(TimerHandle_t xTimer)
 
 void vStateThree_1(void *pvParameters)
 {
-    TickType_t xInitTime;
-    xQueuePeek(InitTickQueue, &xInitTime, portMAX_DELAY);
-
+    xTimerStart(xTimersTick[0], portMAX_DELAY);
     while (1) {
-        if (xTaskGetTickCount() - xInitTime >= 15) {
-            xTimerStop(xTimersTick[0], portMAX_DELAY);
-            vTaskSuspend(StateThree_1);
-        }
-        xTimerStart(xTimersTick[0], portMAX_DELAY);
+        
+        
         vTaskSuspend(StateThree_1);
     }
 }
 
 void vStateThree_2(void *pvParameters)
 {
-    TickType_t xInitTime;
-    xQueuePeek(InitTickQueue, &xInitTime, portMAX_DELAY);
-
+    xTimerStart(xTimersTick[1], portMAX_DELAY);
     while (1) {
-        if (xTaskGetTickCount() - xInitTime >= 15) {
-            xTimerStop(xTimersTick[1], portMAX_DELAY);
-            vTaskSuspend(StateThree_2);
-        }
-        xTimerStart(xTimersTick[1], portMAX_DELAY);
+        
+        
         vTaskSuspend(StateThree_2);
     }
 }
 
 void vStateThree_3(void *pvParameters)
 {
-    TickType_t xInitTime;
-    xQueuePeek(InitTickQueue, &xInitTime, portMAX_DELAY);
-
     tick_data_buffer_t tick_data;
     tick_data.task_number = 3;
 
     while (1) {
         xSemaphoreTake(StateThreeSignal, portMAX_DELAY);
-
-        if (xTaskGetTickCount() - xInitTime >= 15) {
-            vTaskSuspend(StateThree_3);
-        }
-
         tick_data.tick_number = xTaskGetTickCount();
         xQueueSend(TickQueue, &tick_data, portMAX_DELAY);
     }
@@ -960,15 +943,10 @@ void vStateThree_3(void *pvParameters)
 
 void vStateThree_4(void *pvParameters)
 {
-    TickType_t xInitTime;
-    xQueuePeek(InitTickQueue, &xInitTime, portMAX_DELAY);
-
+    xTimerStart(xTimersTick[2], portMAX_DELAY);
     while (1) {
-        if (xTaskGetTickCount() - xInitTime >= 15) {
-            xTimerStop(xTimersTick[2], portMAX_DELAY);
-            vTaskSuspend(StateThree_4);
-        }
-        xTimerStart(xTimersTick[2], portMAX_DELAY);
+        
+        
         vTaskSuspend(StateThree_4);
     }
 }
@@ -1112,6 +1090,21 @@ int main(int argc, char *argv[])
     xTimerChangePeriod(xTimersTick[2], 4, portMAX_DELAY);
     xTimerStop(xTimersTick[2], portMAX_DELAY);
 
+    if (xTimersTick[0] == NULL) {
+        PRINT_ERROR("Could not open tick timer 1");
+        goto err_tick_timer_1;
+    }
+
+    if (xTimersTick[1] == NULL) {
+        PRINT_ERROR("Could not open tick timer 2");
+        goto err_tick_timer_2;
+    }
+
+    if (xTimersTick[2] == NULL) {
+        PRINT_ERROR("Could not open tick timer 4");
+        goto err_tick_timer_4;
+    }
+
     //Infrastructure Tasks
     if (xTaskCreate(basicSequentialStateMachine, "StateMachine",
                     mainGENERIC_STACK_SIZE * 2, NULL,
@@ -1237,6 +1230,12 @@ int main(int argc, char *argv[])
     err_bufferswap:
         vTaskDelete(StateMachine);
     err_statemachine:
+        xTimerDelete(xTimersTick[2], 0);
+    err_tick_timer_4:
+        xTimerDelete(xTimersTick[1], 0);
+    err_tick_timer_2:
+        xTimerDelete(xTimersTick[0], 0);
+    err_tick_timer_1:
         xTimerDelete(xTimers, 0);
     err_timer:
         vQueueDelete(InitTickQueue);
