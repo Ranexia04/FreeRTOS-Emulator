@@ -1,3 +1,5 @@
+Git tutorial on https://github.com/Ranexia04/git-tutorial
+
 Press E to switch states.
 While in state 1: press left mouse button to reset the values.
 
