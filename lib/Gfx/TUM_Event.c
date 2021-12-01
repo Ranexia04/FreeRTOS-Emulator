@@ -89,7 +89,6 @@ static void SDLFetchEvents(void)
                 mouse.y = event.motion.y;
                 xSemaphoreGive(mouse.lock);
             }
-
         }
         else if (event.type == SDL_MOUSEBUTTONDOWN) {
             if (xSemaphoreTake(mouse.lock, 0) == pdTRUE) {
@@ -109,7 +108,6 @@ static void SDLFetchEvents(void)
                 send = 1;
                 xSemaphoreGive(mouse.lock);
             }
-
         }
         else if (event.type == SDL_MOUSEBUTTONUP) {
             if (xSemaphoreTake(mouse.lock, 0) == pdTRUE) {
@@ -129,7 +127,6 @@ static void SDLFetchEvents(void)
                 send = 1;
                 xSemaphoreGive(mouse.lock);
             }
-
         }
     }
 

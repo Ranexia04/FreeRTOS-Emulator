@@ -92,7 +92,7 @@ if(ENABLE_ASTYLE)
     if(NOT WIN32 STREQUAL "1")
         add_custom_target(
             format
-            COMMAND ${CMAKE_BINARY_DIR}/bin/astyle ${ASTYLE_ARGS}
+            COMMAND astyle ${ASTYLE_ARGS}
             COMMENT "running astyle"
         )
     else()

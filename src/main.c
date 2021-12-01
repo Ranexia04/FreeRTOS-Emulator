@@ -845,7 +845,6 @@ void vStateThreeDrawer(void *pvParameters)
 
         while(uxQueueMessagesWaiting(TickQueue)) {
             xQueueReceive(TickQueue, &tick_data, portMAX_DELAY);
-            printf("%d      %d\n", tick_data.tick_number, tick_data.task_number);
             i = tick_data.tick_number;
             sprintf(buffer, "   %d", tick_data.task_number);
             strcat(str[i], buffer);
@@ -862,7 +861,6 @@ void vStateThreeDrawer(void *pvParameters)
             }
             tumDrawText(str[i], SCREEN_WIDTH / 2 - text_width[i] / 2, SCREEN_HEIGHT * i / 15, Black);
         }
-        
 
         vDrawFPS();
         xSemaphoreGive(ScreenLock);
@@ -873,13 +871,11 @@ void vStateThreeDrawer(void *pvParameters)
 
 void vStateThree_1(void *pvParameters)
 {
-
     TickType_t xInitTime, xLastWakeTime;
     tick_data_buffer_t tick_data;
 begin1:
     xQueuePeek(InitTickQueue, &xInitTime, portMAX_DELAY);
     xLastWakeTime = xInitTime;
-
     
     tick_data.task_number = 1;
 
@@ -892,21 +888,17 @@ begin1:
         tick_data.tick_number = xTaskGetTickCount() - xInitTime;
         xQueueSend(TickQueue, &tick_data, 0);
         
-        //try vtaskdelayuntil again, remeber to change tick
-        //vTaskDelay(1);
         vTaskDelayUntil(&xLastWakeTime, 1);
     }
 }
 
 void vStateThree_2(void *pvParameters)
 {
-
     TickType_t xInitTime, xLastWakeTime;
     tick_data_buffer_t tick_data;
 begin2:
     xQueuePeek(InitTickQueue, &xInitTime, portMAX_DELAY);
     xLastWakeTime = xInitTime;
-
     
     tick_data.task_number = 2;
 
@@ -920,14 +912,12 @@ begin2:
 
         xSemaphoreGive(StateThreeSignal);
 
-        //vTaskDelay(2);
         vTaskDelayUntil(&xLastWakeTime, 2);
     }
 }
 
 void vStateThree_3(void *pvParameters)
 {
-
     TickType_t xInitTime;
     tick_data_buffer_t tick_data;
     static int flag = 0;
@@ -938,8 +928,6 @@ begin3:
         goto begin_again;
     }
     
-    
-
     while (1) {
         xSemaphoreTake(StateThreeSignal, portMAX_DELAY);
         flag = 0;
@@ -957,7 +945,6 @@ begin_again:
 
 void vStateThree_4(void *pvParameters)
 {
-
     TickType_t xInitTime, xLastWakeTime;
     tick_data_buffer_t tick_data;
 begin4:
